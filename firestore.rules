@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitives & Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isVerified() { return request.auth.token.email_verified == true; }
+
+    // Validation Blueprints (Phase 4)
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'email', 'balance', 'role', 'tier']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 255 &&
+             data.balance is number && data.balance >= 0 &&
+             data.role in ['user', 'admin'] &&
+             data.tier is int && data.tier >= 1 && data.tier <= 3;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['sender', 'receiver', 'amount', 'type', 'date']) &&
+             data.sender is string && data.sender.size() <= 100 &&
+             data.receiver is string && data.receiver.size() <= 100 &&
+             data.amount is number && data.amount > 0 &&
+             data.type is string && data.date is string;
+    }
+
+    function isValidActivity(data) {
+      return data.keys().hasAll(['type', 'detail', 'date']) &&
+             data.type is string && data.detail is string && data.date is string;
+    }
+
+    function isValidAlert(data) {
+      return data.keys().hasAll(['title', 'message', 'severity', 'date', 'isRead']) &&
+             data.title is string && data.message is string &&
+             data.severity in ['low', 'medium', 'high'] &&
+             data.isRead is bool;
+    }
+
+    function isValidCard(data) {
+      return data.keys().hasAll(['type', 'number', 'name', 'expiry', 'color', 'brand']) &&
+             data.type is string && data.number is string && data.name is string;
+    }
+
+    function isValidRecurringPayment(data) {
+      return data.keys().hasAll(['name', 'amount', 'category', 'frequency', 'nextPaymentDate', 'status', 'type']) &&
+             data.name is string && data.amount is number && data.amount > 0 &&
+             data.frequency in ['daily', 'weekly', 'monthly', 'yearly'] &&
+             data.status in ['active', 'paused', 'cancelled'];
+    }
+
+    // Collections
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && isValidUser(incoming()) && 
+                       incoming().role == 'user' && incoming().balance == 1000; // Welcome bonus logic
+      
+      allow update: if (isOwner(userId) && isValidUser(incoming()) && (
+        // Action: Update Profile
+        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phoneNumber', 'avatar', 'isBiometricEnabled', 'is2FAEnabled', 'lastLogin'])) ||
+        // Action: Verify BVN (Verified via Cloud Function normally, but for demo we allow one-way set)
+        (existing().bvn == "" && incoming().diff(existing()).affectedKeys().hasOnly(['bvn', 'isVerified'])) ||
+        // Action: Upgrade Tier
+        (incoming().tier > existing().tier && incoming().diff(existing()).affectedKeys().hasOnly(['tier'])) ||
+        // Action: Internal Balance Update (This usually needs atomicity with transactions)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['balance']))
+      )) || isAdmin();
+
+      match /activityLog/{logId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidActivity(incoming());
+      }
+
+      match /securityAlerts/{alertId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isAdmin(); // Only system/admin can create alerts
+        allow update: if isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+      }
+
+      match /cards/{cardId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidCard(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      match /externalCards/{cardId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId); // Basic validation
+        allow delete: if isOwner(userId);
+      }
+
+      match /transactions/{txId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidTransaction(incoming());
+      }
+
+      match /escrow/{escrowId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId);
+        allow update: if (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) || isAdmin();
+      }
+
+      match /recurringPayments/{paymentId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidRecurringPayment(incoming());
+        allow update: if isOwner(userId) && isValidRecurringPayment(incoming());
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Admin List
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+    }
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and account information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "balance": { "type": "number" },
+        "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+        "is2FAEnabled": { "type": "boolean" },
+        "accountNumber": { "type": "string" },
+        "bvn": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "phoneNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "tier": { "type": "integer" },
+        "isBiometricEnabled": { "type": "boolean" },
+        "avatar": { "type": "string" },
+        "lastLogin": { "type": "string" }
+      },
+      "required": ["name", "email", "balance", "role", "tier"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Record of a financial transaction",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string" },
+        "receiver": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "date": { "type": "string" },
+        "bank": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["sender", "receiver", "amount", "type", "date"]
+    },
+    "Escrow": {
+      "title": "Escrow",
+      "description": "Funds held in escrow for a transaction",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string" },
+        "receiver": { "type": "string" },
+        "amount": { "type": "number" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "cancelled"] },
+        "date": { "type": "string" }
+      },
+      "required": ["sender", "receiver", "amount", "status", "date"]
+    },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "Record of user activity for security audit",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "detail": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["type", "detail", "date"]
+    },
+    "SecurityAlert": {
+      "title": "Security Alert",
+      "description": "Security notification for the user",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "date": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "ip": { "type": "string" },
+        "device": { "type": "string" },
+        "recommendedActions": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "message", "severity", "date", "isRead"]
+    },
+    "Card": {
+      "title": "Virtual Card",
+      "description": "Virtual debit card issued by Viva",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "number": { "type": "string" },
+        "name": { "type": "string" },
+        "expiry": { "type": "string" },
+        "color": { "type": "string" },
+        "brand": { "type": "string" }
+      },
+      "required": ["type", "number", "name", "expiry", "color", "brand"]
+    },
+    "ExternalCard": {
+      "title": "External Card",
+      "description": "Linked card from an external bank",
+      "type": "object",
+      "properties": {
+        "bank": { "type": "string" },
+        "type": { "type": "string" },
+        "last4": { "type": "string" },
+        "expiry": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["bank", "type", "last4", "expiry", "color"]
+    },
+    "RecurringPayment": {
+      "title": "Recurring Payment",
+      "description": "Scheduled automatic payment for bills or subscriptions",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"] },
+        "nextPaymentDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "paused", "cancelled"] },
+        "type": { "type": "string" }
+      },
+      "required": ["name", "amount", "category", "frequency", "nextPaymentDate", "status", "type"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/activityLog/{logId}": {
+      "schema": "ActivityLog",
+      "description": "User activity history"
+    },
+    "/users/{userId}/securityAlerts/{alertId}": {
+      "schema": "SecurityAlert",
+      "description": "User security notifications"
+    },
+    "/users/{userId}/cards/{cardId}": {
+      "schema": "Card",
+      "description": "Issued virtual cards"
+    },
+    "/users/{userId}/externalCards/{cardId}": {
+      "schema": "ExternalCard",
+      "description": "Linked external cards"
+    },
+    "/users/{userId}/transactions/{txId}": {
+      "schema": "Transaction",
+      "description": "User transaction history"
+    },
+    "/users/{userId}/escrow/{escrowId}": {
+      "schema": "Escrow",
+      "description": "User escrow contracts"
+    },
+    "/users/{userId}/recurringPayments/{paymentId}": {
+      "schema": "RecurringPayment",
+      "description": "User recurring payments"
+    },
+    "/admins/{userId}": {
+      "schema": { "type": "object", "properties": { "promotedAt": { "type": "string" } } },
+      "description": "System administrators list"
+    }
+  }
+}

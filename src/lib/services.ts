@@ -100,6 +100,24 @@ export const userService = {
       handleFirestoreError(error, 'get', 'users');
       return null;
     }
+  },
+
+  subscribeToRecipientAccounts(userId: string, callback: (data: any[]) => void) {
+    const q = query(collection(db, "users", userId, "recipientAccounts"), orderBy("createdAt", "desc"));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  },
+
+  async addRecipientAccount(userId: string, account: any) {
+    try {
+      await addDoc(collection(db, "users", userId, "recipientAccounts"), {
+        ...account,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, 'create', `users/${userId}/recipientAccounts`);
+    }
   }
 };
 
@@ -136,7 +154,7 @@ export const transactionService = {
 };
 
 export const escrowService = {
-  subscribeToEscrow(userId: string, callback: (data: any[]) => void) {
+  subscribeToEscrows(userId: string, callback: (data: any[]) => void) {
     const q = query(collection(db, "users", userId, "escrow"), orderBy("date", "desc"));
     return onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -174,6 +192,19 @@ export const escrowService = {
     } catch (error) {
       handleFirestoreError(error, 'create', `users/${userId}/escrow`);
     }
+  },
+
+  async releaseEscrow(userId: string, escrowId: string) {
+    try {
+      const ref = doc(db, "users", userId, "escrow", escrowId);
+      await updateDoc(ref, { 
+        status: "completed",
+        completedAt: serverTimestamp()
+      });
+      // In a real app, this would trigger a payout to the receiver's account
+    } catch (error) {
+      handleFirestoreError(error, 'update', `users/${userId}/escrow/${escrowId}`);
+    }
   }
 };
 
@@ -210,21 +241,45 @@ export const bettingService = {
 
 export const investmentService = {
   async invest(userId: string, investData: any) {
-    return transactionService.addTransaction(userId, {
+    // Basic investment logic: Deduct balance and create a record
+    const result = await transactionService.addTransaction(userId, {
       ...investData,
       type: "transfer",
       receiver: `Investment: ${investData.type}`,
       status: "success"
+    });
+
+    // We could also record this in an investments collection
+    try {
+      await addDoc(collection(db, "users", userId, "investments"), {
+        ...investData,
+        status: "active",
+        date: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error("Failed to record investment details", e);
+    }
+    
+    return result;
+  },
+
+  subscribeToInvestments(userId: string, callback: (data: any[]) => void) {
+    const q = query(collection(db, "users", userId, "investments"), orderBy("date", "desc"));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }
 };
 
 export const scanPayService = {
   async pay(userId: string, payData: any) {
+    // Validate if it's a Viva account or external merchant
+    const isVivaMerchant = payData.merchantId.startsWith("VIVA-");
+    
     return transactionService.addTransaction(userId, {
       ...payData,
       type: "transfer",
-      receiver: `Merchant: ${payData.merchantId}`,
+      receiver: isVivaMerchant ? `Merchant: ${payData.merchantId}` : `Scan & Pay: ${payData.merchantId}`,
       status: "success"
     });
   }

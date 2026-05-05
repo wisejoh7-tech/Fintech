@@ -1,6 +1,6 @@
 {
   "name": "Viva",
   "description": "A modern, high-fidelity fintech dashboard with digital banking, recurring bill payments, escrow services, and advanced security settings.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": []
 }

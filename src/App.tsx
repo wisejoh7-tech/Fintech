@@ -29,6 +29,8 @@ import {
   QrCode,
   Fingerprint,
   ArrowDown,
+  ArrowDownCircle,
+  Check,
   Copy,
   LayoutGrid,
   ShieldAlert,
@@ -79,6 +81,9 @@ import {
   Tooltip, 
   CartesianGrid 
 } from "recharts";
+import { QRCodeSVG } from "qrcode.react";
+import Webcam from "react-webcam";
+import jsQR from "jsqr";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { 
@@ -195,12 +200,15 @@ const chartData = [
   { name: "Sun", balance: 1250000 },
 ];
 
-export default function App() {
+function App() {
   const [user, setUser] = useState<User | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activityLog, setActivityLog] = useState<Activity[]>([]);
   const [securityAlerts, setSecurityAlerts] = useState<SecurityAlert[]>([]);
   const [recurringPayments, setRecurringPayments] = useState<any[]>([]);
+  const [investments, setInvestments] = useState<any[]>([]);
+  const [escrows, setEscrows] = useState<any[]>([]);
+  const [recipientAccounts, setRecipientAccounts] = useState<any[]>([]);
   const [cards, setCards] = useState<CardData[]>([]);
   const [externalCards, setExternalCards] = useState<ExternalCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +224,7 @@ export default function App() {
   const [isBetOpen, setIsBetOpen] = useState(false);
   const [isScanOpen, setIsScanOpen] = useState(false);
   const [isLinkCardOpen, setIsLinkCardOpen] = useState(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const notifiedAlerts = useRef<Set<string>>(new Set());
   const lastBalance = useRef<number | null>(null);
 
@@ -270,6 +279,15 @@ export default function App() {
             lastBalance.current = newUser.balance;
             setUser(newUser);
             setIsAuthenticated(true);
+
+            // Log session start if first time in this mount
+            if (!notifiedAlerts.current.has('session_start')) {
+              activityService.addActivity(firebaseUser.uid, {
+                type: 'Login',
+                detail: `New session started from ${navigator.platform}`
+              });
+              notifiedAlerts.current.add('session_start');
+            }
           }
         });
 
@@ -290,6 +308,9 @@ export default function App() {
         });
 
         recurringPaymentService.subscribeToRecurringPayments(firebaseUser.uid, setRecurringPayments);
+        investmentService.subscribeToInvestments(firebaseUser.uid, setInvestments);
+        escrowService.subscribeToEscrows(firebaseUser.uid, setEscrows);
+        userService.subscribeToRecipientAccounts(firebaseUser.uid, setRecipientAccounts);
         cardService.subscribeToCards(firebaseUser.uid, setCards);
         
         cardService.subscribeToExternalCards(firebaseUser.uid, setExternalCards);
@@ -407,13 +428,15 @@ export default function App() {
 
         <main className="container mx-auto px-4 py-8 max-w-7xl pb-24 md:pb-8 bg-white/30 dark:bg-black/10 backdrop-blur-sm rounded-[3rem] mt-4">
           <Routes>
-            <Route path="/" element={<Dashboard user={user} transactions={transactions} activityLog={activityLog} onRefresh={fetchData} searchQuery={searchQuery} setIsBillsOpen={setIsBillsOpen} setIsEscrowOpen={setIsEscrowOpen} setIsAirtimeOpen={setIsAirtimeOpen} setIsInvestOpen={setIsInvestOpen} externalCards={externalCards} />} />
-            <Route path="/profile" element={<Profile user={user} onRefresh={fetchData} setIsUpgradeOpen={setIsUpgradeOpen} setIsAuthenticated={setIsAuthenticated} />} />
-            <Route path="/settings" element={<AccountSettings user={user} />} />
+            <Route path="/" element={<Dashboard user={user} transactions={transactions} activityLog={activityLog} onRefresh={fetchData} searchQuery={searchQuery} setIsBillsOpen={setIsBillsOpen} setIsEscrowOpen={setIsEscrowOpen} setIsAirtimeOpen={setIsAirtimeOpen} setIsInvestOpen={setIsInvestOpen} externalCards={externalCards} setIsSecurityModalOpen={setIsSecurityModalOpen} recipientAccounts={recipientAccounts} />} />
+            <Route path="/profile" element={<Profile user={user} onRefresh={fetchData} setIsUpgradeOpen={setIsUpgradeOpen} setIsAuthenticated={setIsAuthenticated} setIsSecurityModalOpen={setIsSecurityModalOpen} />} />
+            <Route path="/settings" element={<AccountSettings user={user} onRefresh={fetchData} />} />
             <Route path="/cards" element={<CardsView user={user} cards={cards} onRefresh={fetchData} />} />
             <Route path="/admin" element={<AdminDashboard user={user} />} />
           </Routes>
         </main>
+
+        <SecurityCenterModal isOpen={isSecurityModalOpen} onClose={() => setIsSecurityModalOpen(false)} />
 
         <SecurityAlertsModal 
           isOpen={isAlertsOpen} 
@@ -435,6 +458,7 @@ export default function App() {
           onClose={() => setIsEscrowOpen(false)}
           user={user}
           onRefresh={fetchData}
+          escrows={escrows}
         />
         
         <UpgradeTierModal
@@ -456,6 +480,7 @@ export default function App() {
           onClose={() => setIsInvestOpen(false)} 
           user={user}
           onRefresh={fetchData}
+          investments={investments}
         />
 
         <BetModal 
@@ -725,7 +750,7 @@ const VirtualCard: React.FC<{ type: string, number: string, name: string, expiry
   );
 }
 
-function Profile({ user, onRefresh, setIsUpgradeOpen, setIsAuthenticated }: { user: User | null, onRefresh: () => void, setIsUpgradeOpen: (open: boolean) => void, setIsAuthenticated: (val: boolean) => void }) {
+function Profile({ user, onRefresh, setIsUpgradeOpen, setIsAuthenticated, setIsSecurityModalOpen }: { user: User | null, onRefresh: () => void, setIsUpgradeOpen: (open: boolean) => void, setIsAuthenticated: (val: boolean) => void, setIsSecurityModalOpen: (open: boolean) => void }) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isBVNModalOpen, setIsBVNModalOpen] = useState(false);
   const [isAddBankModalOpen, setIsAddBankModalOpen] = useState(false);
@@ -799,7 +824,11 @@ function Profile({ user, onRefresh, setIsUpgradeOpen, setIsAuthenticated }: { us
           </div>
           <p className="text-xs text-muted-foreground mt-1">{user?.email}</p>
           <div className="flex items-center justify-center gap-2 mt-3">
-            <Badge variant="secondary" className={`border-none ${user?.isVerified ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+            <Badge 
+              variant="secondary" 
+              onClick={() => !user?.isVerified && setIsBVNModalOpen(true)}
+              className={`border-none ${user?.isVerified ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700 cursor-pointer hover:bg-orange-200'}`}
+            >
               {user?.isVerified ? 'Verified' : 'Unverified'}
             </Badge>
             <Badge className="bg-primary text-primary-foreground border-none">Tier {user?.tier}</Badge>
@@ -837,7 +866,14 @@ function Profile({ user, onRefresh, setIsUpgradeOpen, setIsAuthenticated }: { us
                 <Info className="w-3 h-3" />
                 {user?.isVerified 
                   ? `Maximum daily transfer for Tier ${user?.tier} verified accounts.` 
-                  : `Verify your account to increase Tier ${user?.tier} limit to ₦${getEffectiveLimit(user?.tier || 1, true).toLocaleString()}`}
+                  : (
+                    <button 
+                      onClick={() => setIsBVNModalOpen(true)}
+                      className="hover:text-primary transition-colors text-left font-bold"
+                    >
+                      {`Verify your account to increase Tier ${user?.tier} limit to ₦${getEffectiveLimit(user?.tier || 1, true).toLocaleString()}`}
+                    </button>
+                  )}
               </p>
             </div>
           </div>
@@ -880,7 +916,11 @@ function Profile({ user, onRefresh, setIsUpgradeOpen, setIsAuthenticated }: { us
         />
         
         <ProfileItem icon={<Bell className="w-5 h-5" />} label="Notification History" />
-        <ProfileItem icon={<ShieldCheck className="w-5 h-5" />} label="Security Center" />
+        <ProfileItem 
+          onClick={() => setIsSecurityModalOpen(true)}
+          icon={<ShieldCheck className="w-5 h-5" />} 
+          label="Security Center" 
+        />
 
         <div className="pt-4">
           <Button 
@@ -903,7 +943,7 @@ function Profile({ user, onRefresh, setIsUpgradeOpen, setIsAuthenticated }: { us
   );
 }
 
-function AccountSettings({ user }: { user: User | null }) {
+function AccountSettings({ user, onRefresh }: { user: User | null, onRefresh: () => void }) {
   const [notifications, setNotifications] = useState({
     push: true,
     email: true,
@@ -976,7 +1016,11 @@ function AccountSettings({ user }: { user: User | null }) {
             description="Use Face ID or Touch ID"
             active={!!user?.isBiometricEnabled}
             onToggle={async () => {
-              if (user) await userService.updateProfile(user.id, { isBiometricEnabled: !user.isBiometricEnabled });
+              if (user) {
+                await userService.updateProfile(user.id, { isBiometricEnabled: !user.isBiometricEnabled });
+                toast.success(`Biometric Login ${!user.isBiometricEnabled ? 'enabled' : 'disabled'}`);
+                onRefresh();
+              }
             }}
           />
           <SettingsToggle 
@@ -984,7 +1028,11 @@ function AccountSettings({ user }: { user: User | null }) {
             description="Verify high-value transfers"
             active={!!user?.is2FAEnabled}
             onToggle={async () => {
-              if (user) await userService.updateProfile(user.id, { is2FAEnabled: !user.is2FAEnabled });
+              if (user) {
+                await userService.updateProfile(user.id, { is2FAEnabled: !user.is2FAEnabled });
+                toast.success(`2FA ${!user.is2FAEnabled ? 'enabled' : 'disabled'}`);
+                onRefresh();
+              }
             }}
           />
           <div className="p-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => toast.info("Change password feature coming soon")}>
@@ -1462,7 +1510,66 @@ function ProfileItem({ icon, label, onClick }: { icon: React.ReactNode, label: s
   );
 }
 
-function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, setIsBillsOpen, setIsEscrowOpen, setIsAirtimeOpen, setIsInvestOpen, externalCards }: { user: User | null, transactions: Transaction[], activityLog: Activity[], onRefresh: () => void, searchQuery: string, setIsBillsOpen: (open: boolean) => void, setIsEscrowOpen: (open: boolean) => void, setIsAirtimeOpen: (open: boolean) => void, setIsInvestOpen: (open: boolean) => void, externalCards: ExternalCard[] }) {
+function TransferConfirmModal({ isOpen, onClose, onConfirm, recipient, recipientName, amount, fee, bank }: { isOpen: boolean, onClose: () => void, onConfirm: () => void, recipient: string, recipientName: string, amount: string, fee: number, bank: string }) {
+  const total = parseFloat(amount) + fee;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-sm">
+            <Card className="shadow-2xl border border-primary/20">
+              <CardHeader>
+                <CardTitle className="text-center">Confirm Transfer</CardTitle>
+                <CardDescription className="text-center">Review your transaction details</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-col items-center justify-center py-4">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                    <Send className="w-8 h-8" />
+                  </div>
+                  <p className="text-3xl font-black text-primary">₦{parseFloat(amount).toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">Amount to Send</p>
+                </div>
+
+                <div className="space-y-3 bg-secondary/30 p-4 rounded-2xl border border-muted">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Recipient</span>
+                    <span className="font-bold">{recipientName || recipient}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Account Number</span>
+                    <span className="font-mono">{recipient}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Bank</span>
+                    <span className="font-bold">{bank}</span>
+                  </div>
+                  <div className="border-t border-dashed my-2" />
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Transfer Fee</span>
+                    <span>₦{fee.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-base font-black">
+                    <span>Total Amount</span>
+                    <span className="text-primary">₦{total.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button variant="ghost" className="flex-1 rounded-xl" onClick={onClose}>Edit</Button>
+                  <Button className="flex-1 rounded-xl shadow-lg shadow-primary/20" onClick={onConfirm}>Confirm & Send</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, setIsBillsOpen, setIsEscrowOpen, setIsAirtimeOpen, setIsInvestOpen, externalCards, setIsSecurityModalOpen, recipientAccounts }: { user: User | null, transactions: Transaction[], activityLog: Activity[], onRefresh: () => void, searchQuery: string, setIsBillsOpen: (open: boolean) => void, setIsEscrowOpen: (open: boolean) => void, setIsAirtimeOpen: (open: boolean) => void, setIsInvestOpen: (open: boolean) => void, externalCards: ExternalCard[], setIsSecurityModalOpen: (open: boolean) => void, recipientAccounts: any[] }) {
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false);
   const [isReceiveDetailsOpen, setIsReceiveDetailsOpen] = useState(false);
@@ -1478,8 +1585,12 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBetOpen, setIsBetOpen] = useState(false);
   const [isScanOpen, setIsScanOpen] = useState(false);
+  const [isBVNModalOpen, setIsBVNModalOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isLinkCardOpen, setIsLinkCardOpen] = useState(false);
+  const [isTransferConfirmOpen, setIsTransferConfirmOpen] = useState(false);
+  const [resolvedRecipientName, setResolvedRecipientName] = useState("");
+  const [transferFee, setTransferFee] = useState(0);
   const [selectedExternalCard, setSelectedExternalCard] = useState<ExternalCard | null>(null);
 
   const currentLimit = getEffectiveLimit(user?.tier || 1, !!user?.isVerified);
@@ -1559,20 +1670,20 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
       return;
     }
 
+    setIsTransferConfirmOpen(false);
     setIsSubmitting(true);
     try {
-      // Viva-to-Viva internal transfer check
       const isViva = !selectedBank || selectedBank === "Viva";
-      let recipientName = recipient;
+      let finalRecipientName = recipient;
 
       if (isViva) {
         const recipientUser: any = await userService.findUserByAccountNumber(recipient);
         if (recipientUser) {
-          recipientName = recipientUser.name;
+          finalRecipientName = recipientUser.name;
           await transactionService.addTransaction(recipientUser.id, {
             type: 'receive',
             amount: numAmount,
-            sender: user.accountNumber, // Use accountNumber instead of name
+            sender: user.accountNumber,
             receiver: recipientUser.accountNumber,
             bank: 'Viva'
           });
@@ -1582,18 +1693,67 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
       await transactionService.addTransaction(user.id, {
         type: 'transfer',
         amount: numAmount,
-        receiver: isViva ? (recipientName === recipient ? recipient : `${recipientName} (${recipient})`) : `${recipient} (${selectedBank})`,
-        sender: user.accountNumber, // Use accountNumber instead of name
+        receiver: isViva ? (finalRecipientName === recipient ? recipient : `${finalRecipientName} (${recipient})`) : `${recipient} (${selectedBank})`,
+        sender: user.accountNumber,
         bank: selectedBank || 'Viva'
       });
 
-      toast.success(`₦${amount} sent to ${recipientName} via ${selectedBank}`);
+      toast.success(`₦${amount} sent to ${finalRecipientName} via ${selectedBank}`);
       setIsTransferOpen(false);
       setRecipient("");
       setAmount("");
       setSelectedBank("Viva");
+      setResolvedRecipientName("");
     } catch (err: any) {
       toast.error(err.message || "Transfer failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const initiateTransferValidation = async () => {
+    if (!recipient || !amount || !user) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    const numAmount = parseFloat(amount);
+    if (numAmount <= 0) {
+      toast.error("Invalid amount");
+      return;
+    }
+
+    if (numAmount > user.balance) {
+      toast.error("Insufficient balance");
+      return;
+    }
+
+    const limit = getEffectiveLimit(user.tier, user.isVerified);
+    if (numAmount > limit) {
+      toast.error(`Amount exceeds your tier ${user.tier} limit of ₦${limit.toLocaleString()}`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const isViva = !selectedBank || selectedBank === "Viva";
+      setTransferFee(isViva ? 0 : 25); // Example fee for external transfers
+
+      if (isViva) {
+        const recipientUser: any = await userService.findUserByAccountNumber(recipient);
+        if (recipientUser) {
+          setResolvedRecipientName(recipientUser.name);
+        } else {
+          setResolvedRecipientName(recipient);
+        }
+      } else {
+        setResolvedRecipientName(recipient);
+      }
+      
+      setIsTransferConfirmOpen(true);
+    } catch (err) {
+      console.error("Validation error", err);
+      toast.error("Error validating transfer");
     } finally {
       setIsSubmitting(false);
     }
@@ -1869,12 +2029,16 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
         {/* Right Column: Quick Actions & Recent Transactions */}
         <div className="space-y-8">
           {/* Activity Log Section */}
-          <Card className="border border-primary/20 shadow-sm h-[300px] flex flex-col">
+          <Card 
+            onClick={() => setIsSecurityModalOpen(true)}
+            className="border border-primary/20 shadow-sm h-[300px] flex flex-col cursor-pointer hover:border-primary/50 transition-all group"
+          >
             <CardHeader className="flex flex-row items-center justify-between py-4">
-              <CardTitle className="text-lg flex items-center gap-2">
+              <CardTitle className="text-lg flex items-center gap-2 group-hover:text-primary transition-colors">
                 <History className="w-5 h-5 text-primary" />
                 Security Activity
               </CardTitle>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
               {activityLog.map((log) => (
@@ -2054,140 +2218,228 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
       {/* Add Money Modal */}
       <AnimatePresence>
         {isAddMoneyOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="w-full max-w-md"
+              className="w-full max-w-lg"
             >
-            <Card className="shadow-2xl border border-primary/30">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Add Money</CardTitle>
-                    <CardDescription>Top up your account via Card or Bank Transfer.</CardDescription>
+              <Card className="shadow-2xl border border-primary/20 overflow-hidden rounded-[2.5rem]">
+                <CardHeader className="bg-primary/5 pb-8 relative">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-2xl flex items-center gap-2">
+                        <ArrowDownCircle className="w-6 h-6 text-primary" />
+                        Add Money
+                      </CardTitle>
+                      <CardDescription className="pt-1">Choose your preferred method to top up.</CardDescription>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => setIsAddMoneyOpen(false)} className="rounded-full hover:bg-primary/10">
+                      <X className="w-5 h-5" />
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => setIsAddMoneyOpen(false)}>
-                    <X className="w-4 h-4" />
-                  </Button>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                
+                <CardContent className="p-6">
                   <Tabs defaultValue="card" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 rounded-xl h-12">
-                      <TabsTrigger value="card" className="rounded-lg">Bank Card</TabsTrigger>
-                      <TabsTrigger value="transfer" className="rounded-lg">Transfer</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-2 rounded-2xl h-14 bg-secondary/50 p-1 mb-6">
+                      <TabsTrigger value="card" className="rounded-xl font-bold data-[state=active]:shadow-sm data-[state=active]:bg-background">
+                        <CreditCard className="w-4 h-4 mr-2" /> Bank Card
+                      </TabsTrigger>
+                      <TabsTrigger value="transfer" className="rounded-xl font-bold data-[state=active]:shadow-sm data-[state=active]:bg-background">
+                        <Building2 className="w-4 h-4 mr-2" /> Transfer
+                      </TabsTrigger>
                     </TabsList>
-                    <TabsContent value="card" className="pt-4 space-y-4">
-                      {externalCards.length > 0 && (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Linked Cards</label>
-                          <div className="grid grid-cols-1 gap-2">
-                            {externalCards.map(card => (
+
+                    <TabsContent value="card" className="space-y-6 mt-0">
+                      {/* Amount Input */}
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                          <label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Amount to Add</label>
+                          {amount && <span className="text-xs font-bold text-primary">Fee: ₦0.00</span>}
+                        </div>
+                        <div className="relative group">
+                          <div className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-slate-400 group-focus-within:text-primary transition-colors">₦</div>
+                          <input 
+                            type="number" 
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            placeholder="0.00" 
+                            className="w-full h-20 pl-14 pr-6 rounded-3xl border-2 border-transparent bg-slate-50 dark:bg-slate-900 focus:border-primary focus:bg-white dark:focus:bg-slate-800 transition-all text-3xl font-black outline-none tracking-tight"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quick Amounts */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {[1000, 2000, 5000, 10000].map(v => (
+                          <button 
+                            key={v} 
+                            onClick={() => setAmount(v.toString())} 
+                            className={`py-3 rounded-2xl border font-bold transition-all ${
+                              amount === v.toString() 
+                                ? "bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/20 scale-105" 
+                                : "bg-background border-muted hover:border-primary/50 hover:bg-primary/5 active:scale-95"
+                            }`}
+                          >
+                            <span className="text-[10px] block opacity-70">₦</span>
+                            <span className="text-sm">{v.toLocaleString()}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Payment Method */}
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                          <label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Select Card</label>
+                          <button 
+                            onClick={() => setIsLinkCardOpen(true)}
+                            className="text-xs font-bold text-primary hover:underline"
+                          >
+                            + Add New
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                          {externalCards.length > 0 ? (
+                            externalCards.map(card => (
                               <button
                                 key={card.id}
                                 onClick={() => {
                                   setSelectedExternalCard(card);
                                   setSourceBank(card.bank);
                                 }}
-                                className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                                className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
                                   selectedExternalCard?.id === card.id 
-                                    ? "border-primary bg-primary/5 ring-1 ring-primary" 
-                                    : "bg-slate-50 dark:bg-slate-900 border-transparent hover:border-slate-200"
+                                    ? "border-primary bg-primary/5 shadow-md" 
+                                    : "bg-background border-muted hover:border-primary/30"
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center border shadow-sm text-lg font-bold">
+                                <div className="flex items-center gap-4">
+                                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black ${
+                                    card.bank.toLowerCase().includes('kuda') ? 'bg-purple-100 text-purple-700' :
+                                    card.bank.toLowerCase().includes('gtbank') ? 'bg-orange-100 text-orange-700' :
+                                    'bg-slate-100 text-slate-700'
+                                  }`}>
                                     {card.bank[0]}
                                   </div>
                                   <div className="text-left">
-                                    <p className="font-bold text-sm tracking-tight">{card.bank}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase font-black">**** {card.last4} • {card.type}</p>
+                                    <p className="font-bold tracking-tight">{card.bank}</p>
+                                    <p className="text-xs text-muted-foreground font-medium">•••• {card.last4} • {card.type}</p>
                                   </div>
                                 </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedExternalCard?.id === card.id ? "border-primary bg-primary" : "border-slate-300"}`}>
-                                  {selectedExternalCard?.id === card.id && <div className="w-2 h-2 bg-white rounded-full" />}
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedExternalCard?.id === card.id ? "border-primary bg-primary" : "border-muted"}`}>
+                                  {selectedExternalCard?.id === card.id && <Check className="w-4 h-4 text-white" />}
                                 </div>
                               </button>
-                            ))}
-                          </div>
+                            ))
+                          ) : (
+                            <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-dashed border-muted">
+                              <p className="text-sm text-muted-foreground font-medium">No cards linked yet.</p>
+                            </div>
+                          )}
                         </div>
-                      )}
-
-                      <div className="flex items-center gap-2 py-2">
-                        <div className="h-px bg-slate-200 flex-1" />
-                        <span className="text-[10px] uppercase font-bold text-slate-400">or use other bank</span>
-                        <div className="h-px bg-slate-200 flex-1" />
                       </div>
 
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <label className="text-sm font-medium">Select Bank</label>
-                          <Button variant="ghost" className="h-auto p-0 text-primary text-xs font-bold hover:bg-transparent" onClick={() => setIsLinkCardOpen(true)}>
-                            Link New Card +
-                          </Button>
-                        </div>
-                        <select 
-                          value={selectedExternalCard ? "" : sourceBank}
-                          onChange={(e) => {
-                            setSourceBank(e.target.value);
-                            setSelectedExternalCard(null);
-                          }}
-                          className="w-full p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none transition-all appearance-none"
-                        >
-                          <option value="" disabled={!selectedExternalCard}>-- Choose Bank --</option>
-                          <option value="First Bank">First Bank</option>
-                          <option value="PalmPay">PalmPay</option>
-                          <option value="OPay">OPay</option>
-                          <option value="Kuda">Kuda</option>
-                          <option value="Fairmoney">Fairmoney</option>
-                          <option value="Branch">Branch</option>
-                          <option value="Eco Bank">Eco Bank</option>
-                          <option value="Polaris Bank">Polaris Bank</option>
-                          <option value="Access Bank">Access Bank</option>
-                          <option value="FCMB">FCMB</option>
-                          <option value="Union Bank">Union Bank</option>
-                          <option value="GTBank">GTBank</option>
-                          <option value="Zenith Bank">Zenith Bank</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Amount to Add (₦)</label>
-                        <input 
-                          type="number" 
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                          placeholder="0.00" 
-                          className="w-full p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none transition-all text-2xl font-bold text-center"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {[1000, 5000, 10000, 20000].map(v => (
-                          <button key={v} onClick={() => setAmount(v.toString())} className="flex-1 py-2 text-xs font-semibold rounded-lg border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                            ₦{v.toLocaleString()}
-                          </button>
-                        ))}
-                      </div>
                       <Button 
-                        className="w-full h-14 rounded-2xl text-lg font-bold" 
-                        disabled={isSubmitting || !amount}
+                        className="w-full h-16 rounded-[1.25rem] text-lg font-black shadow-xl shadow-primary/20" 
+                        disabled={isSubmitting || !amount || (!selectedExternalCard && !sourceBank)}
                         onClick={handleReceive}
                       >
-                        {isSubmitting ? "Processing..." : "Add Money Now"}
+                        {isSubmitting ? (
+                          <span className="flex items-center gap-2">
+                            <RefreshCcw className="w-5 h-5 animate-spin" /> Processing...
+                          </span>
+                        ) : "Add Money Now"}
                       </Button>
                     </TabsContent>
-                    <TabsContent value="transfer" className="pt-4 p-4 rounded-2xl border border-dashed border-primary/30 bg-primary/5 text-center">
-                      <p className="text-sm font-medium mb-2">Transfer to this account</p>
-                      <p className="text-2xl font-black text-primary tracking-wider mb-1">{user?.accountNumber}</p>
-                      <p className="text-xs text-muted-foreground uppercase font-bold">Viva Bank</p>
-                      <Button variant="ghost" className="mt-4 text-xs h-8 gap-2" onClick={() => {
-                        navigator.clipboard.writeText(user?.accountNumber || "");
-                        toast.success("Account copied");
-                      }}>
-                        <Copy className="w-3 h-3" /> Copy Details
+
+                    <TabsContent value="transfer" className="space-y-6 mt-0">
+                      <div className="p-8 rounded-[2rem] bg-gradient-to-br from-primary to-emerald-600 text-white shadow-2xl relative overflow-hidden group">
+                        {/* Decorative background elements */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl" />
+                        
+                        <div className="relative space-y-6">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Virtual Account</span>
+                            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                              <ShieldCheck className="w-6 h-6" />
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <p className="text-xs opacity-70 font-bold mb-1">Account Number</p>
+                            <div className="flex items-center gap-3">
+                              <p className="text-3xl font-black tracking-widest">{user?.accountNumber}</p>
+                              <button 
+                                onClick={() => {
+                                  navigator.clipboard.writeText(user?.accountNumber || "");
+                                  toast.success("Account copied");
+                                }}
+                                className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-end">
+                            <div>
+                              <p className="text-xs opacity-70 font-bold mb-1">Bank Name</p>
+                              <p className="text-xl font-black tracking-tight">Viva Bank</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs opacity-70 font-bold mb-1">Account Name</p>
+                              <p className="text-sm font-bold truncate max-w-[150px]">{user?.name}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                            <CheckCircle2 className="w-6 h-6" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm font-bold">Instant Top-up</p>
+                            <p className="text-xs text-muted-foreground">Your balance will update automatically as soon as the transfer is successful.</p>
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                            <AlertCircle className="w-6 h-6" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm font-bold text-amber-900 dark:text-amber-400">Notice</p>
+                            <p className="text-xs text-amber-700 dark:text-amber-500">Only transfer money from an account that matches your Viva name to avoid delays.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button 
+                        variant="outline" 
+                        className="w-full h-14 rounded-2xl font-bold gap-2 border-2 hover:bg-secondary/50"
+                        onClick={() => {
+                          const text = `Bank: Viva Bank\nAccount: ${user?.accountNumber}\nName: ${user?.name}`;
+                          navigator.clipboard.writeText(text);
+                          toast.success("All details copied");
+                        }}
+                      >
+                        <Share2 className="w-5 h-5" /> Copy All Details
                       </Button>
                     </TabsContent>
                   </Tabs>
                 </CardContent>
+                
+                <CardFooter className="bg-secondary/20 p-4 flex justify-center">
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    <Lock className="w-3 h-3" /> PCI-DSS COMPLIANT • SECURE ENCRYPTION
+                  </div>
+                </CardFooter>
               </Card>
             </motion.div>
           </div>
@@ -2253,40 +2505,13 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
       <AnimatePresence>
         {isWithdrawOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-md">
-              <Card className="border border-primary/30 shadow-2xl">
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Withdraw Funds</CardTitle>
-                    <CardDescription>Transfer money to your linked bank account.</CardDescription>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => setIsWithdrawOpen(false)}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl border space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Withdraw to</p>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Building2 className="w-4 h-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm">Zenith Bank • 0123</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 text-center">
-                    <label className="text-xs text-muted-foreground font-bold uppercase tracking-widest">Amount to Withdraw</label>
-                    <input type="number" placeholder="0.00" className="w-full outline-none text-4xl font-bold bg-transparent text-center" />
-                    <p className="text-xs text-muted-foreground mt-2">Available: ₦{user?.balance.toLocaleString()}</p>
-                  </div>
-                  <Button className="w-full h-14 rounded-2xl font-bold text-lg" onClick={() => toast.error("Please add a recipient account first")}>
-                    Withdraw Now
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
+            <WithdrawModal 
+              isOpen={isWithdrawOpen} 
+              onClose={() => setIsWithdrawOpen(false)} 
+              user={user} 
+              recipientAccounts={recipientAccounts}
+              onRefresh={onRefresh}
+            />
           </div>
         )}
       </AnimatePresence>
@@ -2362,9 +2587,12 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
                           Daily Limit: ₦{currentLimit.toLocaleString()}
                         </span>
                         {!user?.isVerified && (
-                          <p className="text-[8px] text-orange-600 font-bold mt-1 uppercase tracking-tighter">
+                          <button 
+                            onClick={() => setIsBVNModalOpen(true)}
+                            className="text-[8px] text-orange-600 font-bold mt-1 uppercase tracking-tighter hover:underline"
+                          >
                             Verify BVN to increase to ₦{getEffectiveLimit(user?.tier || 1, true).toLocaleString()}
-                          </p>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -2387,9 +2615,9 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
                     <Button 
                       className="flex-1 rounded-xl" 
                       disabled={isSubmitting}
-                      onClick={() => handleSensitiveAction(handleTransfer)}
+                      onClick={initiateTransferValidation}
                     >
-                      {isSubmitting ? "Processing..." : "Send Now"}
+                      {isSubmitting ? "Processing..." : "Continue"}
                     </Button>
                   </div>
                 </CardContent>
@@ -2398,6 +2626,17 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
           </div>
         )}
       </AnimatePresence>
+
+      <TransferConfirmModal 
+        isOpen={isTransferConfirmOpen}
+        onClose={() => setIsTransferConfirmOpen(false)}
+        onConfirm={() => handleSensitiveAction(handleTransfer)}
+        recipient={recipient}
+        recipientName={resolvedRecipientName}
+        amount={amount}
+        fee={transferFee}
+        bank={selectedBank}
+      />
 
       <BetModal 
         isOpen={isBetOpen} 
@@ -2424,20 +2663,22 @@ function Dashboard({ user, transactions, activityLog, onRefresh, searchQuery, se
         user={user}
         onRefresh={onRefresh} 
       />
+      <BVNModal user={user} isOpen={isBVNModalOpen} onClose={() => setIsBVNModalOpen(false)} onRefresh={onRefresh} />
     </div>
   );
 }
 
-function InvestModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onClose: () => void, user: User | null, onRefresh: () => void }) {
+function InvestModal({ isOpen, onClose, user, onRefresh, investments }: { isOpen: boolean, onClose: () => void, user: User | null, onRefresh: () => void, investments: any[] }) {
   const [type, setType] = useState("Fixed Deposit");
   const [amount, setAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'browse' | 'my'>('browse');
 
   const investmentOptions = [
-    { type: "Fixed Deposit", rate: "12.5% p.a", risk: "Low", icon: <Building2 className="w-5 h-5" /> },
-    { type: "Global Stocks", rate: "Variable", risk: "High", icon: <TrendingUp className="w-5 h-5" /> },
-    { type: "Real Estate", rate: "18% p.a", risk: "Medium", icon: <Home className="w-5 h-5" /> },
-    { type: "Mutual Funds", rate: "10% p.a", risk: "Low", icon: <ShieldCheck className="w-5 h-5" /> },
+    { type: "Fixed Deposit", rate: "12.5% p.a", risk: "Low", icon: <Building2 className="w-5 h-5 text-blue-500" /> },
+    { type: "Global Stocks", rate: "Variable", risk: "High", icon: <TrendingUp className="w-5 h-5 text-purple-500" /> },
+    { type: "Real Estate", rate: "18% p.a", risk: "Medium", icon: <Home className="w-5 h-5 text-amber-500" /> },
+    { type: "Mutual Funds", rate: "10% p.a", risk: "Low", icon: <ShieldCheck className="w-5 h-5 text-emerald-500" /> },
   ];
 
   const handleInvest = async () => {
@@ -2459,7 +2700,8 @@ function InvestModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, on
         sender: user.accountNumber
       });
       toast.success(`Success! ₦${amount} invested in ${type}`);
-      onClose();
+      setActiveTab('my');
+      setAmount("");
     } catch (err: any) {
       toast.error(err.message || "Investment failed");
     } finally {
@@ -2472,63 +2714,115 @@ function InvestModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, on
       {isOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-md">
-            <Card className="shadow-2xl border border-primary/20">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Invest & Grow</CardTitle>
-                  <CardDescription>Secure your future with Viva Invest.</CardDescription>
+            <Card className="shadow-2xl border border-primary/20 overflow-hidden rounded-[2rem]">
+              <CardHeader className="pb-2 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6" />
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={onClose}><X className="w-4 h-4" /></Button>
                 </div>
-                <Button variant="ghost" size="icon" onClick={onClose}><X className="w-4 h-4" /></Button>
+                <CardTitle className="mt-2">Viva Invest</CardTitle>
+                <CardDescription>Grow your wealth with professional portfolios.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  {investmentOptions.map((opt) => (
-                    <button
-                      key={opt.type}
-                      onClick={() => setType(opt.type)}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
-                        type === opt.type ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-primary/10 hover:border-primary/30'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${type === opt.type ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-600'}`}>
-                        {opt.icon}
+
+              <div className="flex border-b mx-6">
+                <button 
+                  onClick={() => setActiveTab('browse')}
+                  className={`flex-1 py-3 text-xs font-bold transition-all ${activeTab === 'browse' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}`}
+                >
+                  Explore
+                </button>
+                <button 
+                  onClick={() => setActiveTab('my')}
+                  className={`flex-1 py-3 text-xs font-bold transition-all ${activeTab === 'my' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}`}
+                >
+                  Portfolio ({investments.length})
+                </button>
+              </div>
+
+              <CardContent className="pt-6 space-y-4">
+                {activeTab === 'browse' ? (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      {investmentOptions.map((opt) => (
+                        <button
+                          key={opt.type}
+                          onClick={() => setType(opt.type)}
+                          className={`p-4 rounded-2xl border text-left transition-all ${
+                            type === opt.type ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm' : 'border-primary/10 hover:border-primary/30'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${type === opt.type ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-600'}`}>
+                            {opt.icon}
+                          </div>
+                          <p className="text-sm font-bold">{opt.type}</p>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-[10px] text-emerald-600 font-bold">{opt.rate}</p>
+                            <Badge variant="outline" className={`text-[8px] py-0 px-1 ${
+                              opt.risk === 'Low' ? 'text-blue-500 border-blue-200 bg-blue-50' :
+                              opt.risk === 'Medium' ? 'text-amber-500 border-amber-200 bg-amber-50' :
+                              'text-red-500 border-red-200 bg-red-50'
+                            }`}>
+                              {opt.risk}
+                            </Badge>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Amount to Invest (₦)</label>
+                      <input 
+                        type="number" 
+                        value={amount} 
+                        onChange={(e) => setAmount(e.target.value)} 
+                        placeholder="0.00" 
+                        className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none font-bold text-lg" 
+                      />
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border flex items-center justify-between text-xs font-bold">
+                      <span className="text-muted-foreground">Est. Annual Return</span>
+                      <span className="text-emerald-500">₦{(parseFloat(amount || "0") * 0.12).toLocaleString()}</span>
+                    </div>
+
+                    <Button className="w-full h-14 rounded-2xl font-black text-lg bg-primary shadow-lg shadow-primary/20" disabled={isSubmitting || !amount} onClick={handleInvest}>
+                      {isSubmitting ? "Processing..." : `Invest in ${type}`}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-80 overflow-y-auto pr-1 animate-in fade-in slide-in-from-left-4">
+                    {investments.length === 0 ? (
+                      <div className="text-center py-10 space-y-3 opacity-50">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                          <EyeOff className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <p className="text-sm italic">You don't have any investments yet.</p>
                       </div>
-                      <p className="text-sm font-bold">{opt.type}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-[10px] text-emerald-600 font-bold">{opt.rate}</p>
-                        <Badge variant="outline" className={`text-[8px] py-0 px-1 ${
-                          opt.risk === 'Low' ? 'text-blue-500 border-blue-200 bg-blue-50' :
-                          opt.risk === 'Medium' ? 'text-amber-500 border-amber-200 bg-amber-50' :
-                          'text-red-500 border-red-200 bg-red-50'
-                        }`}>
-                          {opt.risk}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Investment Amount (₦)</label>
-                  <input 
-                    type="number" 
-                    value={amount} 
-                    onChange={(e) => setAmount(e.target.value)} 
-                    placeholder="Enter amount" 
-                    className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none" 
-                  />
-                </div>
-
-                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 flex items-start gap-3">
-                  <Info className="w-4 h-4 text-blue-600 mt-0.5" />
-                  <p className="text-[10px] text-blue-800 leading-relaxed">
-                    By investing, you agree to the terms of the {type} portfolio. Past performance does not guarantee future results.
-                  </p>
-                </div>
-
-                <Button className="w-full h-12 rounded-xl font-bold" disabled={isSubmitting} onClick={handleInvest}>
-                  {isSubmitting ? "Processing..." : "Confirm Investment"}
-                </Button>
+                    ) : (
+                      investments.map((inv, idx) => (
+                        <div key={inv.id || idx} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-950 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                                <TrendingUp className="w-5 h-5" />
+                              </div>
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-sm">{inv.type}</p>
+                                <p className="text-[10px] text-muted-foreground">Active since {new Date(inv.timestamp?.seconds * 1000).toLocaleDateString()}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-black text-primary">₦{inv.amount.toLocaleString()}</p>
+                              <p className="text-[9px] text-emerald-600 font-bold">+2.4% Profit</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -2634,18 +2928,63 @@ function ScanModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onCl
   const [isScanning, setIsScanning] = useState(true);
   const [amount, setAmount] = useState("");
   const [merchant, setMerchant] = useState<string | null>(null);
+  const webcamRef = useRef<Webcam>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
       setIsScanning(true);
       setMerchant(null);
-      const timer = setTimeout(() => {
-        setIsScanning(false);
-        setMerchant("Cuppa Café - Abuja");
-      }, 3000);
-      return () => clearTimeout(timer);
+      setAmount("");
+      setIsProcessing(false);
+      return;
     }
-  }, [isOpen]);
+
+    // Auto-detect simulation if camera is not available or for demo
+    const timer = setTimeout(() => {
+      if (isScanning && !merchant) {
+         setMerchant("VIVA-7729 (Mainland Hub)");
+         setIsScanning(false);
+      }
+    }, 5000);
+
+    const interval = setInterval(() => {
+      if (webcamRef.current && isScanning) {
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (imageSrc) {
+          const image = new Image();
+          image.src = imageSrc;
+          image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(image, 0, 0);
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const code = jsQR(imageData.data, imageData.width, imageData.height);
+              if (code) {
+                try {
+                  const data = JSON.parse(code.data);
+                  if (data.type === 'viva_merchant' || data.merchantId) {
+                    setMerchant(data.merchantId || data.name || "Unknown Merchant");
+                    setIsScanning(false);
+                  }
+                } catch (e) {
+                  // Not a JSON QR or not Viva
+                }
+              }
+            }
+          };
+        }
+      }
+    }, 1000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [isOpen, isScanning, merchant]);
 
   const handlePay = async () => {
     if (!user || !amount || !merchant) return;
@@ -2654,6 +2993,7 @@ function ScanModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onCl
       toast.error("Insufficient balance");
       return;
     }
+    setIsProcessing(true);
     try {
       await scanPayService.pay(user.id, {
         merchantId: merchant,
@@ -2664,6 +3004,8 @@ function ScanModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onCl
       onClose();
     } catch (err: any) {
       toast.error(err.message || "Payment failed");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -2676,15 +3018,34 @@ function ScanModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onCl
               <div className="p-8 text-center space-y-6">
                 {isScanning ? (
                   <>
-                    <div className="relative w-48 h-48 mx-auto border-2 border-primary/50 rounded-3xl flex items-center justify-center overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/20 to-transparent animate-scan" style={{ height: '33.33%', top: '-33.33%' }} />
-                      <QrCode className="w-24 h-24 text-primary/40" />
+                    <div className="relative w-full aspect-square mx-auto border-2 border-primary/50 rounded-3xl flex items-center justify-center overflow-hidden bg-black">
+                      <Webcam
+                        audio={false}
+                        ref={webcamRef}
+                        screenshotFormat="image/jpeg"
+                        videoConstraints={{ facingMode: "environment" }}
+                        className="absolute inset-0 w-full h-full object-cover opacity-60"
+                        mirrored={false}
+                        screenshotQuality={1}
+                        forceScreenshotSourceSize={false}
+                        imageSmoothing={true}
+                        disablePictureInPicture={true}
+                        onUserMedia={() => {}}
+                        onUserMediaError={() => {}}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/40 to-transparent animate-scan" style={{ height: '20%', top: '-20%' }} />
+                      <div className="z-10 bg-black/40 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
+                        <QrCode className="w-16 h-16 text-primary" />
+                      </div>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold">Scanning QR Code</h3>
-                      <p className="text-slate-400 text-xs">Align the QR code within the frame</p>
+                      <h3 className="text-xl font-bold">Scan Merchant QR</h3>
+                      <p className="text-slate-400 text-xs">Point your camera at a Viva Merchant QR code</p>
                     </div>
-                    <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={onClose}>Cancel</Button>
+                    <div className="flex flex-col gap-2">
+                       <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={onClose}>Cancel</Button>
+                       <p className="text-[10px] text-slate-500 italic">Scanning automatically in 5s for demo...</p>
+                    </div>
                   </>
                 ) : (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -2697,18 +3058,28 @@ function ScanModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onCl
                     </div>
                     <div className="space-y-2">
                        <label className="text-xs text-slate-400 font-bold uppercase tracking-widest">Amount to Pay</label>
-                       <input 
-                        type="number" 
-                        autoFocus
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder="₦0.00" 
-                        className="w-full bg-transparent text-white text-4xl font-bold text-center outline-none" 
-                       />
+                       <div className="relative">
+                         <span className="absolute left-0 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-500">₦</span>
+                         <input 
+                          type="number" 
+                          autoFocus
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          placeholder="0.00" 
+                          className="w-full bg-transparent text-white text-4xl font-bold text-center outline-none pl-6" 
+                         />
+                       </div>
                     </div>
-                    <Button className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black text-lg" onClick={handlePay}>
-                      Confirm & Pay
-                    </Button>
+                    <div className="flex gap-3">
+                      <Button variant="outline" className="flex-1 border-white/10 text-white hover:bg-white/5" onClick={() => setIsScanning(true)}>Rescan</Button>
+                      <Button 
+                        className="flex-2 h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black text-lg" 
+                        onClick={handlePay}
+                        disabled={isProcessing || !amount}
+                      >
+                        {isProcessing ? "Paying..." : "Pay Now"}
+                      </Button>
+                    </div>
                     <Button variant="ghost" className="w-full text-slate-400" onClick={onClose}>Cancel</Button>
                   </motion.div>
                 )}
@@ -2944,28 +3315,28 @@ function AirtimeModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, o
 
   const dataPlans: Record<string, { label: string, price: number, data: string }[]> = {
     "MTN": [
-      { label: "1GB / 1 Day", price: 350, data: "1GB" },
-      { label: "2GB / 2 Days", price: 600, data: "2GB" },
-      { label: "5GB / 7 Days", price: 1500, data: "5GB" },
-      { label: "10GB / 30 Days", price: 3000, data: "10GB" }
+      { label: "100MB / 1 Day", price: 110, data: "100MB" },
+      { label: "200MB / 2 Days", price: 230, data: "200MB" },
+      { label: "1GB / 30 Days", price: 500, data: "1GB" },
+      { label: "5GB / 30 Days", price: 2500, data: "5GB" }
     ],
     "Airtel": [
-      { label: "1.5GB / 30 Days", price: 1000, data: "1.5GB" },
-      { label: "2GB / 30 Days", price: 1200, data: "2GB" },
-      { label: "5.5GB / 30 Days", price: 2500, data: "5.5GB" },
-      { label: "12GB / 30 Days", price: 4000, data: "12GB" }
+      { label: "100MB / 1 Day", price: 110, data: "100MB" },
+      { label: "200MB / 2 Days", price: 230, data: "200MB" },
+      { label: "1GB / 30 Days", price: 500, data: "1GB" },
+      { label: "5GB / 30 Days", price: 2500, data: "5GB" }
     ],
     "Glo": [
-      { label: "1.35GB / 14 Days", price: 500, data: "1.35GB" },
-      { label: "2.9GB / 30 Days", price: 1000, data: "2.9GB" },
-      { label: "5.8GB / 30 Days", price: 2000, data: "5.8GB" },
-      { label: "7.7GB / 30 Days", price: 2500, data: "7.7GB" }
+      { label: "100MB / 1 Day", price: 110, data: "100MB" },
+      { label: "200MB / 2 Days", price: 230, data: "200MB" },
+      { label: "1GB / 30 Days", price: 500, data: "1GB" },
+      { label: "5GB / 30 Days", price: 2500, data: "5GB" }
     ],
     "9mobile": [
-      { label: "1GB / 30 Days", price: 1000, data: "1GB" },
-      { label: "2GB / 30 Days", price: 1200, data: "2GB" },
-      { label: "4.5GB / 30 Days", price: 2000, data: "4.5GB" },
-      { label: "11GB / 30 Days", price: 4000, data: "11GB" }
+      { label: "100MB / 1 Day", price: 110, data: "100MB" },
+      { label: "200MB / 2 Days", price: 230, data: "200MB" },
+      { label: "1GB / 30 Days", price: 500, data: "1GB" },
+      { label: "5GB / 30 Days", price: 2500, data: "5GB" }
     ]
   };
 
@@ -3069,7 +3440,7 @@ function AirtimeModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, o
                       />
                     </div>
                     <div className="flex gap-2">
-                      {[100, 200, 500, 1000].map((v) => (
+                      {[110, 230, 500, 1000].map((v) => (
                         <button 
                           key={v} 
                           onClick={() => setAmount(v.toString())}
@@ -3464,7 +3835,23 @@ function UpgradeTierModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolea
                               <Badge className="bg-primary text-white border-none py-0.5 px-2 text-[10px]">Current</Badge>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">Requires: {info.requirements}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Requires: {info.requirements.includes('BVN') && !user?.isVerified ? (
+                              <button 
+                                onClick={() => {
+                                  onClose();
+                                  // This would need a way to open BVN modal, 
+                                  // but since they are siblings or at App level, 
+                                  // it might be tricky without lifting state or using a global store.
+                                  // For now, I'll assume they can see it in Profile or Dashboard.
+                                  toast.info("Go to Profile to verify BVN");
+                                }}
+                                className="text-primary font-bold hover:underline"
+                              >
+                                {info.requirements}
+                              </button>
+                            ) : info.requirements}
+                          </p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-black text-primary">₦{info.verified.toLocaleString()}</p>
@@ -3499,11 +3886,12 @@ function UpgradeTierModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolea
   );
 }
 
-function EscrowModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, onClose: () => void, user: User | null, onRefresh: () => void }) {
+function EscrowModal({ isOpen, onClose, user, onRefresh, escrows }: { isOpen: boolean, onClose: () => void, user: User | null, onRefresh: () => void, escrows: any[] }) {
   const [receiver, setReceiver] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'create' | 'active'>('create');
 
   const handleCreateEscrow = async () => {
     if (!user) return;
@@ -3538,6 +3926,22 @@ function EscrowModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, on
     }
   };
 
+  const handleReleaseEscrow = async (escrowId: string) => {
+    if (!user) return;
+    setIsSubmitting(true);
+    try {
+      await escrowService.releaseEscrow(user.id, escrowId);
+      toast.success("Funds released successfully!");
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to release funds");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const activeEscrows = escrows.filter(e => e.status === 'held');
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -3548,55 +3952,108 @@ function EscrowModal({ isOpen, onClose, user, onRefresh }: { isOpen: boolean, on
             exit={{ opacity: 0, scale: 0.9 }}
             className="w-full max-w-sm"
           >
-            <Card className="shadow-2xl border border-primary/20">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
-                  <ShieldCheck className="w-6 h-6" />
+            <Card className="shadow-2xl border border-primary/20 overflow-hidden">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={onClose}><X className="w-4 h-4" /></Button>
                 </div>
-                <CardTitle>Create Escrow</CardTitle>
-                <CardDescription>Secure your transaction by holding funds until delivery.</CardDescription>
+                <CardTitle className="mt-2 text-2xl font-black">Escrow Protect</CardTitle>
+                <CardDescription>Secure payments until goods or services are delivered.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Recipient Account Number</label>
-                  <input 
-                    type="text" 
-                    value={receiver}
-                    onChange={(e) => setReceiver(e.target.value)}
-                    placeholder="Recipient Viva account number" 
-                    className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Amount (₦)</label>
-                  <input 
-                    type="number" 
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00" 
-                    className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Reason (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="e.g. iPhone Purchase" 
-                    className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                  />
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <Button variant="ghost" className="flex-1 rounded-xl" onClick={onClose}>Cancel</Button>
-                  <Button 
-                    className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white" 
-                    disabled={isSubmitting}
-                    onClick={handleCreateEscrow}
-                  >
-                    {isSubmitting ? "Holding..." : "Secure Funds"}
-                  </Button>
-                </div>
+              
+              <div className="flex border-b mx-6">
+                <button 
+                  onClick={() => setActiveTab('create')}
+                  className={`flex-1 py-3 text-xs font-bold transition-all ${activeTab === 'create' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}`}
+                >
+                  Create New
+                </button>
+                <button 
+                  onClick={() => setActiveTab('active')}
+                  className={`flex-1 py-3 text-xs font-bold transition-all ${activeTab === 'active' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}`}
+                >
+                  Active ({activeEscrows.length})
+                </button>
+              </div>
+
+              <CardContent className="pt-6 space-y-4">
+                {activeTab === 'create' ? (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Recipient Account</label>
+                      <input 
+                        type="text" 
+                        value={receiver}
+                        onChange={(e) => setReceiver(e.target.value)}
+                        placeholder="Recipient Account Number" 
+                        className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Amount (₦)</label>
+                      <input 
+                        type="number" 
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="0.00" 
+                        className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Transaction Reason</label>
+                      <input 
+                        type="text" 
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="e.g. Graphic Design Work" 
+                        className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" 
+                      />
+                    </div>
+                    <Button 
+                      className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg shadow-lg shadow-indigo-500/20" 
+                      disabled={isSubmitting}
+                      onClick={handleCreateEscrow}
+                    >
+                      {isSubmitting ? "Holding Funds..." : "Secure Transition"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-80 overflow-y-auto pr-1 animate-in fade-in slide-in-from-left-4">
+                    {activeEscrows.length === 0 ? (
+                      <div className="text-center py-10 space-y-3 opacity-50">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                          <EyeOff className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <p className="text-sm">No active escrows found</p>
+                      </div>
+                    ) : (
+                      activeEscrows.map((e, idx) => (
+                        <div key={e.id || idx} className="p-4 rounded-2xl border bg-slate-50 dark:bg-slate-950 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-sm">To: {e.receiver}</p>
+                              <p className="text-[10px] text-muted-foreground">{e.reason || "No reason"}</p>
+                            </div>
+                            <p className="font-black text-indigo-600">₦{e.amount.toLocaleString()}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none px-2 h-5 text-[8px] uppercase tracking-tighter">FUNDS HELD</Badge>
+                          </div>
+                          <Button 
+                            className="w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold" 
+                            disabled={isSubmitting}
+                            onClick={() => handleReleaseEscrow(e.id)}
+                          >
+                            Release Funds to Recipient
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -4006,6 +4463,7 @@ function RegisterScreen({ onRegister, onBackToLogin }: { onRegister: () => void,
   const strengthColors = ["bg-red-500", "bg-red-400", "bg-orange-400", "bg-yellow-400", "bg-emerald-500"];
 
   const isPasswordValid = hasUpperCase && hasLowerCase && hasSpecialChar && isLongEnough;
+  const isPhoneValid = phoneNumber ? /^(0\d{10})$/.test(phoneNumber) : true;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4016,6 +4474,11 @@ function RegisterScreen({ onRegister, onBackToLogin }: { onRegister: () => void,
 
     if (!isPasswordValid) {
       toast.error("Please meet all password requirements.");
+      return;
+    }
+
+    if (!isPhoneValid) {
+      toast.error("Please enter a valid 11-digit phone number starting with 0.");
       return;
     }
 
@@ -4131,8 +4594,9 @@ function RegisterScreen({ onRegister, onBackToLogin }: { onRegister: () => void,
             <input 
               type="tel" 
               value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="Phone Number (Optional)" 
+              onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              aria-invalid={phoneNumber.length > 0 && !isPhoneValid ? "true" : "false"}
+              placeholder="Phone Number (11 digits)" 
               className="w-full p-4 pl-12 rounded-2xl bg-white border border-primary/30 focus-visible:ring-primary aria-invalid:border-destructive text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 transition-all"
             />
           </div>
@@ -4217,3 +4681,232 @@ function RegisterScreen({ onRegister, onBackToLogin }: { onRegister: () => void,
     </div>
   );
 }
+
+function SecurityCenterModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-lg">
+            <Card className="shadow-2xl border border-primary/20 max-h-[85vh] flex flex-col overflow-hidden rounded-[2.5rem]">
+              <CardHeader className="bg-primary/5 pb-8 relative">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-2xl flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                        <ShieldCheck className="w-6 h-6 text-primary" />
+                      </div>
+                      Security Center
+                    </CardTitle>
+                    <CardDescription className="pt-2">Protect your account and get help when you need it.</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-primary/10">
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </CardHeader>
+              
+              <CardContent className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">Customer Support</h3>
+                  <div className="space-y-3">
+                    <a href="tel:08183793358" className="block p-4 rounded-2xl bg-secondary/30 border border-muted hover:border-primary/50 transition-all cursor-pointer group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                          <Phone className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="font-bold text-foreground">Call Customer Care</p>
+                          <p className="text-sm text-muted-foreground">08183793358, 07041754159</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    </a>
+                    
+                    <a href="tel:08106202283" className="block p-4 rounded-2xl bg-secondary/30 border border-muted hover:border-primary/50 transition-all cursor-pointer group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 group-hover:scale-110 transition-transform">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="font-bold text-foreground">Fraud Hotline</p>
+                          <p className="text-sm text-muted-foreground">08106202283</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    </a>
+                    
+                    <div className="p-4 rounded-2xl bg-secondary/30 border border-muted hover:border-primary/50 transition-all cursor-pointer group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                          <Mail className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="font-bold">Email Support</p>
+                          <div className="text-sm text-muted-foreground space-y-0.5">
+                            <a href="mailto:idemudiawisdom7@gmail.com" className="hover:text-primary block">idemudiawisdom7@gmail.com</a>
+                            <a href="mailto:wisdomoas@yahoo.com" className="hover:text-primary block">wisdomoas@yahoo.com</a>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">Quick Actions</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-muted hover:bg-slate-100 hover:border-primary/30 transition-all group">
+                      <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center group-hover:rotate-12 transition-transform">
+                        <X className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs font-bold">Freeze Card</span>
+                    </button>
+                    <button className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-muted hover:bg-slate-100 hover:border-primary/30 transition-all group">
+                      <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center group-hover:rotate-12 transition-transform">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs font-bold">Update PIN</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800">
+                  <div className="flex gap-3">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-emerald-900 dark:text-emerald-400">Your account is safe</p>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-500 mt-0.5">We use bank-grade security to protect your funds and personal data.</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+              
+              <CardFooter className="bg-secondary/20 p-4 flex justify-center border-t">
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Version 2.4.0 • Secured by Viva Shield</p>
+              </CardFooter>
+            </Card>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function WithdrawModal({ isOpen, onClose, user, recipientAccounts, onRefresh }: { isOpen: boolean, onClose: () => void, user: User | null, recipientAccounts: any[], onRefresh: () => void }) {
+  const [selectedAccount, setSelectedAccount] = useState<any>(recipientAccounts[0] || null);
+  const [amount, setAmount] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (recipientAccounts.length > 0 && !selectedAccount) {
+      setSelectedAccount(recipientAccounts[0]);
+    }
+  }, [recipientAccounts, selectedAccount]);
+
+  const handleWithdraw = async () => {
+    if (!user || !selectedAccount || !amount) {
+      toast.error("Please select an account and enter an amount");
+      return;
+    }
+    const numAmount = parseFloat(amount);
+    if (numAmount > user.balance) {
+      toast.error("Insufficient balance");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await transactionService.addTransaction(user.id, {
+        type: 'withdrawal',
+        amount: numAmount,
+        receiver: `${selectedAccount.bankName} (${selectedAccount.accountNumber})`,
+        sender: user.accountNumber,
+        bank: selectedAccount.bankName,
+        status: 'success'
+      });
+      toast.success(`Successfully withdrawn ₦${amount} to ${selectedAccount.bankName}`);
+      onRefresh();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Withdrawal failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-md">
+      <Card className="border border-primary/30 shadow-2xl overflow-hidden rounded-[2.5rem]">
+        <CardHeader className="flex flex-row items-center justify-between pb-2 border-b">
+          <div>
+            <CardTitle>Withdraw Funds</CardTitle>
+            <CardDescription>Move money to your external bank account.</CardDescription>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          <div className="space-y-2">
+             <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Select Destination</label>
+             {recipientAccounts.length === 0 ? (
+               <div className="p-6 rounded-2xl border bg-slate-50 dark:bg-slate-950 text-center space-y-3">
+                 <p className="text-sm text-muted-foreground">No linked accounts found.</p>
+                 <Button variant="outline" size="sm" onClick={() => toast.info("Add account feature coming soon")}>Add Account</Button>
+               </div>
+             ) : (
+               <div className="grid grid-cols-1 gap-2">
+                 {recipientAccounts.map((acc, idx) => (
+                   <button 
+                    key={acc.id || idx}
+                    onClick={() => setSelectedAccount(acc)}
+                    className={`p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                      selectedAccount?.id === acc.id ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-primary/10 hover:border-primary/30'
+                    }`}
+                   >
+                     <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedAccount?.id === acc.id ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          <Building2 className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">{acc.bankName}</p>
+                          <p className="text-[10px] text-muted-foreground">{acc.accountName} • {acc.accountNumber.slice(-4)}</p>
+                        </div>
+                     </div>
+                     {selectedAccount?.id === acc.id && <div className="w-2 h-2 rounded-full bg-primary" />}
+                   </button>
+                 ))}
+               </div>
+             )}
+          </div>
+
+          <div className="space-y-2 text-center py-4">
+            <label className="text-xs text-muted-foreground font-bold uppercase tracking-widest">Amount to Withdraw</label>
+            <div className="relative">
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300">₦</span>
+              <input 
+                type="number" 
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00" 
+                className="w-full h-16 outline-none text-4xl font-black bg-transparent text-center pl-6" 
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Available: ₦{user?.balance.toLocaleString()}</p>
+          </div>
+
+          <Button 
+            className="w-full h-14 rounded-2xl font-black text-lg shadow-lg shadow-primary/20" 
+            disabled={isSubmitting || !selectedAccount || !amount}
+            onClick={handleWithdraw}
+          >
+            {isSubmitting ? "Processing..." : "Withdraw Now"}
+          </Button>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+export default App;

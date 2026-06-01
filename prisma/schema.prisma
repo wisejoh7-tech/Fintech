@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  firebaseId        String    @unique
+  name              String
+  email             String    @unique
+  phoneNumber       String?
+  avatar            String?
+  role              Role      @default(USER)
+  tier              Int       @default(1)
+  isVerified        Boolean   @default(false)
+  transactionPin    String?   // Hashed 4-digit PIN
+  bvn               String?   // Encrypted
+  nin               String?   // Encrypted
+  is2FAEnabled      Boolean   @default(false)
+  isBiometricActive Boolean   @default(true)
+  referralCode      String    @unique @default(cuid())
+  referredBy        String?
+  rewardBalance     BigInt    @default(0)
+  fcmToken          String?
+  accounts          Account[]
+  beneficiaries     Beneficiary[]
+  budgets           Budget[]
+  activities        ActivityLog[]
+  scheduledPayments ScheduledPayment[]
+  vaults            Vault[]
+  invoices          Invoice[]
+  staff             StaffAccount[]
+  paymentLinks      PaymentLink[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Account {
+  id            String        @id @default(uuid())
+  accountNumber String        @unique
+  balance       BigInt        @default(0) // Balance in Kobo/Minor units
+  currency      String        @default("NGN")
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  sentTrans     Transaction[] @relation("SenderAccount")
+  recvTrans     Transaction[] @relation("ReceiverAccount")
+  ledgerEntries Ledger[]
+  cards         Card[]
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Transaction {
+  id                String            @id @default(uuid())
+  amount            BigInt
+  fee               BigInt            @default(0)
+  type              TransactionType
+  status            TransactionStatus @default(PENDING)
+  reference         String            @unique
+  description       String?
+  category          String            @default("General") // New Field for Analytics
+  senderAccountId   String?
+  receiverAccountId String?
+  senderAccount     Account?          @relation("SenderAccount", fields: [senderAccountId], references: [id])
+  receiverAccount   Account?          @relation("ReceiverAccount", fields: [receiverAccountId], references: [id])
+  initiatorId       String?           // Staff ID who created it
+  approverId        String?           // Admin ID who approved it
+  metadata          Json?
+  processedAt       DateTime?
+  createdAt         DateTime          @default(now())
+}
+
+model Budget {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  category  String
+  limit     BigInt   // Monthly limit in minor units
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+}
+
+model Ledger {
+  id        String   @id @default(uuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  amount    BigInt   // Positive for credit, negative for debit
+  balance   BigInt   // Snapshot of balance after this entry
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // e.g., LOGIN, TRANSFER, KYC_UPDATE
+  detail    String
+  ip        String?
+  device    String?
+  createdAt DateTime @default(now())
+}
+
+model ScheduledPayment {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  amount          BigInt
+  receiver        String
+  bank            String
+  frequency       String   // WEEKLY, MONTHLY
+  nextRun         DateTime
+  description     String?
+  status          String   @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED
+  createdAt       DateTime @default(now())
+}
+
+model Vault {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  name          String
+  balance       BigInt      @default(0)
+  targetAmount  BigInt?
+  interestRate  Float       @default(0.0) // Percentage per annum
+  category      String      @default("GENERAL") // TAX, EMERGENCY, SAVINGS
+  lockUntil     DateTime?
+  status        VaultStatus @default(ACTIVE)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+enum VaultStatus {
+  ACTIVE
+  LOCKED
+  CLOSED
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  clientName      String
+  clientEmail     String?
+  amount          BigInt
+  dueDate         DateTime
+  description     String?
+  status          InvoiceStatus @default(SENT)
+  reference       String        @unique
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model StaffAccount {
+  id              String    @id @default(uuid())
+  companyId       String
+  company         User      @relation(fields: [companyId], references: [id])
+  name            String
+  email           String    @unique
+  role            StaffRole @default(VIEWER)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+}
+
+enum InvoiceStatus {
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum StaffRole {
+  ADMIN
+  INITIATOR
+  VIEWER
+}
+
+model PaymentLink {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  title           String
+  description     String?
+  amount          BigInt?       // Null means custom amount by payer
+  linkId          String        @unique // Short unique slug
+  isActive        Boolean       @default(true)
+  totalReceived   BigInt        @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum TransactionType {
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  BILL_PAYMENT
+  AIRTIME
+  INVESTMENT
+  BULK_TRANSFER
+  PAYMENT_LINK
+  CASHBACK
+  REFERRAL_BONUS
+}
+
+enum TransactionStatus {
+  PENDING
+  AWAITING_APPROVAL
+  SUCCESS
+  FAILED
+  REVERSED
+  DECLINED
+}
+
+model Card {
+  id            String      @id @default(uuid())
+  accountId     String
+  account       Account     @relation(fields: [accountId], references: [id])
+  type          String      // e.g., "Virtual Visa", "Corporate Mastercard"
+  last4         String
+  pan           String      // Encrypted full PAN
+  expiry        String      // MM/YY
+  cvv           String      // Encrypted CVV
+  cardName      String
+  color         String      @default("bg-slate-900")
+  status        CardStatus  @default(ACTIVE)
+  spendLimit    BigInt      @default(0) // 0 means no limit
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+enum CardStatus {
+  ACTIVE
+  FROZEN
+  TERMINATED
+}
+
+model Beneficiary {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  name          String
+  accountNumber String
+  bankName      String
+  bankCode      String?
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, accountNumber])
+}

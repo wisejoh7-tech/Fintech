@@ -1,8 +1,13 @@
 import { prisma } from "../config/db";
 import { ActivityService } from "./ActivityService";
+import { CacheService } from "./CacheService";
 
 export class AdminService {
   static async getStats() {
+    const cacheKey = "admin:stats";
+    const cachedStats = await CacheService.get(cacheKey);
+    if (cachedStats) return cachedStats;
+
     const [totalUsers, totalTransactions, transactions] = await Promise.all([
       prisma.user.count(),
       prisma.transaction.count(),
@@ -11,7 +16,9 @@ export class AdminService {
     const totalVolume = transactions.reduce((sum, tx) => sum + Number(tx.amount), 0) / 100;
     const recentActivity = await ActivityService.getRecent();
 
-    return { totalUsers, totalTransactions, totalVolume, recentActivity };
+    const stats = { totalUsers, totalTransactions, totalVolume, recentActivity };
+    await CacheService.set(cacheKey, stats, 300); // Cache for 5 minutes
+    return stats;
   }
 
   static async getUsers() {
@@ -33,9 +40,9 @@ export class AdminService {
   }
 
   static async updateRiskLevel(userId: string, riskLevel: string) {
-    return await prisma.user.update({
+    return await (prisma.user as any).update({
       where: { id: userId },
-      data: { riskLevel: riskLevel as any }
+      data: { riskLevel: riskLevel }
     });
   }
 }

@@ -9,7 +9,7 @@ export class ScheduledPaymentService {
   }
 
   static async schedule(userId: string, data: { amount: number, receiver: string, frequency: string, description: string, startDate: string }) {
-    return await prisma.scheduledPayment.create({
+    return await (prisma.scheduledPayment as any).create({
       data: {
         userId,
         amount: BigInt(Math.round(data.amount * 100)),

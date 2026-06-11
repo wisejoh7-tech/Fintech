@@ -19,10 +19,12 @@ COPY --from=build /app/server.ts ./
 COPY --from=build /app/backend ./backend
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/tsconfig.json ./
+COPY start.sh ./
+RUN chmod +x start.sh
 
 # Install tsx to run server.ts directly or compile it
 RUN npm install -g tsx
 
 EXPOSE 3000
 
-CMD ["tsx", "server.ts"]
+CMD ["./start.sh"]

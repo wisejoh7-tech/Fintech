@@ -852,10 +852,10 @@ export const biometricService = {
       // 2. Create credential on device
       // This is a simplified version. Real WebAuthn uses more complex options.
       const publicKeyCredentialCreationOptions: any = {
-        challenge: Uint8Array.from(atob(challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+        challenge: Uint8Array.from(atob(challenge.replace(/-/g, '+').replace(/_/g, '/')), (c: string) => c.charCodeAt(0)),
         rp: { name: "Viva Banking", id: window.location.hostname },
         user: {
-          id: Uint8Array.from(user.id, c => c.charCodeAt(0)),
+          id: Uint8Array.from(user.id, (c: string) => c.charCodeAt(0)),
           name: email,
           displayName: user.name,
         },

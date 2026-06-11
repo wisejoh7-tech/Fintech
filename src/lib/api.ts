@@ -7,7 +7,15 @@
  */
 import { auth } from "./firebase";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+/**
+ * API Configuration
+ *
+ * IMPORTANT: Replace 'your-viva-api.up.railway.app' with your actual Railway URL
+ * once you have deployed.
+ */
+export const API_BASE_URL = import.meta.env.PROD
+  ? 'https://your-viva-api.up.railway.app'
+  : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
 
 /**
  * Helper to construct full API URLs

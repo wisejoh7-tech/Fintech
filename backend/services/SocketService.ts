@@ -7,17 +7,38 @@ export class SocketService {
   private static io: Server | null = null;
 
   static init(server: HttpServer) {
-    const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-    const pubClient = new IORedis(redisUrl);
-    const subClient = pubClient.duplicate();
+    const redisUrl = process.env.REDIS_URL;
+    const isProduction = process.env.NODE_ENV === 'production';
 
     this.io = new Server(server, {
       cors: {
         origin: "*",
         methods: ["GET", "POST"]
-      },
-      adapter: createAdapter(pubClient, subClient)
+      }
     });
+
+    // Only use Redis adapter if URL is provided OR in production
+    if (redisUrl || isProduction) {
+      try {
+        const pubClient = new IORedis(redisUrl || 'redis://127.0.0.1:6379', {
+          maxRetriesPerRequest: null,
+          retryStrategy: () => isProduction ? Math.min(100, 3000) : null
+        });
+
+        const subClient = pubClient.duplicate();
+
+        // Essential: Handle errors to prevent crash
+        pubClient.on('error', (err) => console.warn('[Socket] Redis Pub Error:', err.message));
+        subClient.on('error', (err) => console.warn('[Socket] Redis Sub Error:', err.message));
+
+        this.io.adapter(createAdapter(pubClient, subClient));
+        console.log('[Socket] Redis adapter initialized');
+      } catch (err) {
+        console.warn('[Socket] Failed to initialize Redis adapter, falling back to local memory');
+      }
+    } else {
+      console.log('[Socket] Using memory adapter (Development)');
+    }
 
     this.io.on("connection", (socket) => {
       console.log("A user connected:", socket.id);

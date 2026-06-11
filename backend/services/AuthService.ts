@@ -1,17 +1,20 @@
 import { prisma } from '../config/db';
 import { PaymentGatewayService } from './PaymentGatewayService';
+import { NotificationService } from './NotificationService';
 
 export class AuthService {
   static async syncUser(firebaseUser: { uid: string; email?: string; name?: string; phoneNumber?: string }) {
     const { uid, email, name, phoneNumber } = firebaseUser;
 
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // 1. Check if user exists
       let user = await tx.user.findUnique({
         where: { firebaseId: uid }
       });
 
+      let isNewUser = false;
       if (!user) {
+        isNewUser = true;
         // 2. Create User
         user = await tx.user.create({
           data: {
@@ -35,7 +38,7 @@ export class AuthService {
         const accountNumber = vAccount?.accountNumber || "81" + Math.floor(10000000 + Math.random() * 90000000).toString();
         const bankName = vAccount?.bankName || "VIVA BANK";
 
-        await tx.account.create({
+        await (tx.account as any).create({
           data: {
             userId: user.id,
             accountNumber,
@@ -47,7 +50,14 @@ export class AuthService {
         });
       }
 
-      return user;
+      return { user, isNewUser };
     });
+
+    if (result.isNewUser && result.user.email) {
+      // Send Welcome Email outside transaction
+      NotificationService.sendWelcomeEmail(result.user.email, result.user.name).catch(err => console.error("Welcome email failed:", err));
+    }
+
+    return result.user;
   }
 }

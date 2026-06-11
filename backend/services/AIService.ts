@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { PersonalFinanceService } from "./PersonalFinanceService";
 import { prisma } from "../config/db";
+import { ExchangeService } from "./ExchangeService";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-pro" });
@@ -13,11 +14,19 @@ export class AIService {
 
       if (!user) return { insight: "User not found", recommendation: "" };
 
+      const mainAccount = user.accounts[0];
+      const balanceInNGN = ExchangeService.convert(
+        Number(mainAccount?.balance || 0n) / 100,
+        mainAccount?.currency || 'NGN',
+        'NGN'
+      );
+
       const prompt = `
         Analyze this business's financial data for a corporate banking app.
         Business Name: ${user.name}
-        Current Balance: ${Number(user.accounts[0]?.balance || 0n) / 100}
-        Recent Spending: ${JSON.stringify(spending)}
+        Current Balance (NGN Equivalent): ₦${balanceInNGN.toLocaleString()}
+        Recent Monthly Spending: ${JSON.stringify(spending)}
+        Account Currency: ${mainAccount?.currency || 'NGN'}
 
         Provide three specific things:
         1. A general insight into their cash flow.

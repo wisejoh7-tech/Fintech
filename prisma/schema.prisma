@@ -22,6 +22,8 @@ model User {
   nin               String?   // Encrypted
   is2FAEnabled      Boolean   @default(false)
   isBiometricActive Boolean   @default(true)
+  riskLevel         String    @default("LOW")
+  metadata          Json?
   referralCode      String    @unique @default(cuid())
   referredBy        String?
   rewardBalance     BigInt    @default(0)
@@ -35,6 +37,9 @@ model User {
   invoices          Invoice[]
   staff             StaffAccount[]
   paymentLinks      PaymentLink[]
+  payrollBatches    PayrollBatch[]
+  escrowsAsBuyer    Escrow[]          @relation("BuyerEscrows")
+  escrowsAsSeller   Escrow[]          @relation("SellerEscrows")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }
@@ -51,6 +56,7 @@ model Account {
   ledgerEntries Ledger[]
   cards         Card[]
   status        AccountStatus @default(ACTIVE)
+  metadata      Json?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -114,7 +120,7 @@ model ScheduledPayment {
   user            User     @relation(fields: [userId], references: [id])
   amount          BigInt
   receiver        String
-  bank            String
+  bank            String?
   frequency       String   // WEEKLY, MONTHLY
   nextRun         DateTime
   description     String?
@@ -244,6 +250,51 @@ model Card {
   spendLimit    BigInt      @default(0) // 0 means no limit
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+}
+
+model PayrollBatch {
+  id              String        @id @default(uuid())
+  companyId       String
+  company         User          @relation(fields: [companyId], references: [id])
+  title           String
+  totalAmount     BigInt
+  status          PayrollStatus @default(PENDING)
+  items           Json          // Array of {name, accountNumber, bank, amount}
+  processedAt     DateTime?
+  createdAt       DateTime      @default(now())
+}
+
+enum PayrollStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Escrow {
+  id              String        @id @default(uuid())
+  buyerId         String
+  buyer           User          @relation("BuyerEscrows", fields: [buyerId], references: [id])
+  sellerId        String
+  seller          User          @relation("SellerEscrows", fields: [sellerId], references: [id])
+  amount          BigInt
+  fee             BigInt
+  description     String?
+  status          EscrowStatus  @default(AWAITING_FUNDS)
+  releaseDate     DateTime?
+  disputeReason   String?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum EscrowStatus {
+  AWAITING_FUNDS
+  HELD          // Money locked in system
+  RELEASED      // Seller paid
+  DISPUTED
+  REFUNDED      // Buyer returned
+  CANCELLED
 }
 
 enum CardStatus {

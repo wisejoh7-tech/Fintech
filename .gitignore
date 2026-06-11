@@ -6,3 +6,21 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+
+# Prisma
+/prisma/migrations/
+/prisma/*.db
+/prisma/*.db-journal
+
+# Capacitor/Mobile
+/android/app/build/
+/android/local.properties

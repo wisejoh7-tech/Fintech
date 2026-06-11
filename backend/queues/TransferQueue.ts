@@ -16,17 +16,14 @@ if (redisUrl || isProduction) {
     connectTimeout: 500, // Very short timeout for dev
     retryStrategy: (times) => {
       // In dev, don't keep retrying if it fails once
-      if (!isProduction && times > 0) return null;
-      return Math.min(times * 50, 2000);
+      if (!isProduction && times > 1) return null;
+      return Math.min(times * 100, 2000);
     }
   });
 
   // CRITICAL: Handle the 'error' event to prevent process crashes/spams
   connection.on('error', (err: any) => {
-    if (useRedis) {
-      console.warn('[Queue] Redis connection lost. Switching to in-memory fallback.');
-      useRedis = false;
-    }
+    // SILENT: hander is present, so it won't crash process
   });
 
   connection.on('connect', () => {

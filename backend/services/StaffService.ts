@@ -13,7 +13,7 @@ export class StaffService {
         companyId,
         name: data.name,
         email: data.email,
-        role: data.role
+        role: data.role as any
       }
     });
   }

@@ -1,6 +1,7 @@
 import { prisma } from "../config/db";
 import { queueTransaction } from "../queues/TransferQueue";
 import { SecurityService } from "./SecurityService";
+import { FraudService } from "./FraudService";
 
 export class TransferService {
   static async initiateTransfer(userId: string, data: {
@@ -14,6 +15,7 @@ export class TransferService {
   }) {
     const { receiver, amount, bank, bankCode, pin, reference, senderAccountId } = data;
 
+    // 1. PIN Verification
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { accounts: true }
@@ -23,6 +25,14 @@ export class TransferService {
       throw new Error("Invalid transaction PIN");
     }
 
+    // 2. Fraud Analysis
+    const riskScore = await FraudService.evaluateTransaction(userId, amount);
+    if (riskScore > 80) {
+      await FraudService.flagUser(userId, `High risk transaction attempt: ${amount} to ${receiver}`);
+      throw new Error("Transaction flagged as high risk. Please contact support.");
+    }
+
+    // 3. Balance Check
     const account = senderAccountId ? user.accounts.find(a => a.id === senderAccountId) : user.accounts[0];
     if (!account || Number(account.balance) < amount * 100) {
       throw new Error("Insufficient balance");
@@ -40,7 +50,7 @@ export class TransferService {
       bankCode
     });
 
-    return { success: true, reference: txRef };
+    return { success: true, reference: txRef, riskScore };
   }
 
   static async initiateBulkTransfer(userId: string, data: {

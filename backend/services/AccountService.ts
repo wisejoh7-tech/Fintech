@@ -86,10 +86,35 @@ export class AccountService {
       await NotificationService.sendPush(
         account.userId,
         "Credit Alert",
-        `Your account has been credited with ₦${amount.toLocaleString()}. Ref: ${reference}`
+        `Your account has been credited with ₦${amount.toLocaleString()}. Ref: ${reference}`,
+        { priority: 'high' }
       );
 
       return transaction;
     });
+  }
+
+  /**
+   * Audit System: Integrity Check
+   * Verifies that the current balance matches the sum of all ledger entries.
+   */
+  static async verifyIntegrity(accountId: string) {
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: { ledgerEntries: true }
+    });
+
+    if (!account) throw new Error("Account not found");
+
+    const ledgerSum = account.ledgerEntries.reduce((sum, entry) => sum + entry.amount, 0n);
+    const isValid = ledgerSum === account.balance;
+
+    return {
+      isValid,
+      accountNumber: account.accountNumber,
+      dbBalance: Number(account.balance) / 100,
+      calculatedLedgerSum: Number(ledgerSum) / 100,
+      discrepancy: (Number(account.balance) - Number(ledgerSum)) / 100
+    };
   }
 }

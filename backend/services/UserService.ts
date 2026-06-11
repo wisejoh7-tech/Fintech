@@ -19,7 +19,7 @@ export class UserService {
       avatar: user.avatar,
       balance: Number(account?.balance || 0n) / 100,
       accountNumber: account?.accountNumber,
-      providerBank: (account?.metadata as any)?.provider_bank || "VIVA BANK",
+      providerBank: (account as any)?.metadata?.provider_bank || "VIVA BANK",
       tier: user.tier,
       role: user.role,
       isVerified: user.isVerified,

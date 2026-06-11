@@ -30,7 +30,7 @@ export class KYCService {
   }
 
   static async submitBusinessDocs(userId: string, data: { utilityBill: string, businessCert: string }) {
-    return await prisma.user.update({
+    return await (prisma.user as any).update({
       where: { id: userId },
       data: {
         tier: 3, // Upgrade to Corporate Tier

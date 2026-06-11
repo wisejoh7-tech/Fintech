@@ -4,15 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.16.0"
   },
+  "main": "electron-main.cjs",
   "scripts": {
     "dev": "tsx server.ts",
     "start": "NODE_ENV=production tsx server.ts",
     "build": "vite build",
+    "postinstall": "prisma generate",
+    "deploy:db": "prisma db push",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "electron:dev": "electron .",
+    "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
@@ -26,9 +31,10 @@
     "@fontsource-variable/geist": "^5.2.8",
     "@google/genai": "^1.29.0",
     "@google/generative-ai": "^0.24.1",
-    "@prisma/client": "^6.4.1",
+    "@prisma/client": "5.22.0",
     "@rollup/rollup-win32-x64-msvc": "^4.60.3",
     "@sentry/node": "^8.54.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "bullmq": "^5.1.0",
@@ -67,7 +73,7 @@
     "@types/node": "^22.14.0",
     "@types/nodemailer": "^6.4.14",
     "autoprefixer": "^10.4.21",
-    "prisma": "^6.4.1",
+    "prisma": "5.22.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

@@ -113,20 +113,25 @@ export class VaultService {
       const interest = BigInt(Math.round(Number(vault.balance) * dailyRate));
 
       if (interest > 0n) {
-        await prisma.$transaction([
-          prisma.vault.update({
+        await prisma.$transaction(async (tx) => {
+          await tx.vault.update({
             where: { id: vault.id },
             data: { balance: { increment: interest } }
-          }),
-          prisma.ledger.create({
-            data: {
-              accountId: vault.userId, // Using userId as a proxy if we don't have a specific account
-              amount: interest,
-              balance: vault.balance + interest,
-              reason: `Daily Interest Credit (${annualRate}%)`
-            }
-          })
-        ]);
+          });
+
+          // Credit the main account ledger for accounting visibility
+          const mainAccount = await tx.account.findFirst({ where: { userId: vault.userId } });
+          if (mainAccount) {
+            await tx.ledger.create({
+              data: {
+                accountId: mainAccount.id,
+                amount: interest,
+                balance: mainAccount.balance, // This balance won't change as interest is in the vault
+                reason: `Interest Credit: ${vault.name} (${annualRate}%)`
+              }
+            });
+          }
+        });
       }
     }
   }

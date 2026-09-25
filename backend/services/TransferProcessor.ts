@@ -19,6 +19,9 @@ export class TransferProcessor {
 
     console.log(`[Processor] Handling transfer: ${reference} | Amount: ${amount} | Bank: ${bank || 'Viva'}`);
 
+    let senderCurrency = 'NGN';
+    let creditAmount = amount;
+
     try {
       await prisma.$transaction(async (tx) => {
         // 1. Get and lock sender account
@@ -28,6 +31,7 @@ export class TransferProcessor {
 
         if (!senderAccount) throw new Error('Sender account not found');
 
+        senderCurrency = senderAccount.currency;
         const koboAmountSender = BigInt(Math.round(amount * 100));
         if (senderAccount.balance < koboAmountSender) {
           throw new Error('Insufficient balance');
@@ -36,7 +40,7 @@ export class TransferProcessor {
         // 2. Handle Receiver (Internal vs External)
         let receiverAccountId: string | null = null;
         let description = `Transfer to ${receiverId}`;
-        let creditAmount = amount; // default to same currency
+        creditAmount = amount; // default to same currency
 
         if (!isExternal) {
           // Internal Viva-to-Viva
@@ -133,7 +137,7 @@ export class TransferProcessor {
       await NotificationService.sendPush(
         senderId,
         'Debit Alert',
-        `Successfully sent ${amount} ${senderAccount?.currency || 'NGN'} to ${receiverId} (${bank || 'Viva'}).`,
+        `Successfully sent ${amount} ${senderCurrency} to ${receiverId} (${bank || 'Viva'}).`,
         { priority: 'high' }
       );
 

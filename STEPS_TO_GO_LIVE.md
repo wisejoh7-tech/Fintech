@@ -4,20 +4,21 @@ This document summarizes every step needed to build, deploy, and secure your ban
 
 ---
 
-## 1. ☁️ Cloud Deployment (Railway + Docker)
-**Goal:** Host your "Bank Server" and Database securely.
+## 1. ☁️ Cloud Deployment (Render + PostgreSQL)
+**Goal:** Host your "Bank Server" and PostgreSQL Database securely on Render.
 
-1.  **Railway Setup:**
-    *   Push your current code to GitHub.
-    *   Connect the repo to [Railway.app](https://railway.app).
-    *   Add **PostgreSQL** and **Redis** services in the Railway dashboard.
-2.  **Environment Variables:** Add these to Railway:
-    *   `GEMINI_API_KEY`: Your AI insights key.
+1.  **Render Setup:**
+    *   Push your code to GitHub.
+    *   Go to [Render Dashboard](https://dashboard.render.com) > **Blueprints** > **New Blueprint Instance**.
+    *   Connect your GitHub repository. Render will automatically detect `render.yaml` and set up both the Web Service (`viva-banking`) and PostgreSQL Database (`viva-db`).
+2.  **Environment Variables:** Configure these in your Render Web Service settings:
+    *   `GEMINI_API_KEY`: Your AI insights API key.
     *   `PAYSTACK_SECRET_KEY`: Your live Paystack key.
-    *   `ENCRYPTION_KEY`: A random 32-character string for BVN encryption.
+    *   `FIREBASE_SERVICE_ACCOUNT`: Firebase admin private key JSON string.
+    *   `ENCRYPTION_KEY`: Auto-generated random string for BVN encryption.
     *   `NODE_ENV`: `production`
-3.  **Database Initialization:**
-    *   Run `npx prisma db push` via the Railway terminal or locally pointing to the Railway URL.
+3.  **Database Auto-Push:**
+    *   On start, `start.sh` executes `npx prisma db push` automatically to sync the PostgreSQL database schema.
 
 ---
 
@@ -25,8 +26,7 @@ This document summarizes every step needed to build, deploy, and secure your ban
 **Goal:** Generate the `.apk` or `.ipa` for your users.
 
 1.  **API Sync:**
-    *   Open `src/lib/api.ts`.
-    *   Update `API_BASE_URL` with your Railway domain (e.g., `https://viva-api.up.railway.app`).
+    *   Set `VITE_API_URL` environment variable during build, or set it in `.env.production` (e.g., `VITE_API_URL=https://viva-banking.onrender.com`).
 2.  **Build & Sync:**
     ```bash
     npm run build

@@ -13,10 +13,10 @@ function createWindow() {
     },
   });
 
-  // In production, point to your Railway URL
-  // In development, point to your local Vite server
+  // In production, point to configured web app URL or local deployment
+  // In development, point to local Vite server
   const startUrl = process.env.NODE_ENV === 'production'
-    ? 'https://your-railway-app-url.up.railway.app'
+    ? (process.env.WEB_APP_URL || process.env.VITE_API_URL || 'http://localhost:3000')
     : 'http://localhost:5173';
 
   mainWindow.loadURL(startUrl);

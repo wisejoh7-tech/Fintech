@@ -16,6 +16,12 @@ const admin = require('firebase-admin');
 import { initMonitoring } from "./backend/monitoring/Sentry";
 import "./backend/workers/TransferWorker";
 
+// Global BigInt JSON serialization fix
+(BigInt.prototype as any).toJSON = function () {
+  const num = Number(this);
+  return Number.isSafeInteger(num) ? num : this.toString();
+};
+
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   try {

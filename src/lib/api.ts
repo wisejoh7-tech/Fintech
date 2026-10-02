@@ -10,12 +10,15 @@ import { auth } from "./firebase";
 /**
  * API Configuration
  *
- * IMPORTANT: Replace 'your-viva-api.up.railway.app' with your actual Railway URL
- * once you have deployed.
+ * Defaults to VITE_API_URL environment variable if set.
+ * In production when served by Express on web, falls back to relative origin.
+ * For mobile builds, set VITE_API_URL to your deployed production URL (e.g. https://viva-banking.onrender.com).
  */
-export const API_BASE_URL = import.meta.env.PROD
-  ? 'https://your-viva-api.up.railway.app'
-  : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
+export const API_BASE_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL
+  : (import.meta.env.PROD && typeof window !== 'undefined'
+      ? window.location.origin
+      : 'http://localhost:3000');
 
 /**
  * Helper to construct full API URLs

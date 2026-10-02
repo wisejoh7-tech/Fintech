@@ -2,11 +2,15 @@
 
 This guide outlines the steps required to transition from local development to a live production mobile app.
 
-## 1. Cloud Infrastructure (Backend)
-- **Deployment**: Deploy the Node.js server to [Render](https://render.com) or [Railway](https://railway.app).
-- **Database**: Use a managed PostgreSQL service like [Supabase](https://supabase.com) or [Neon](https://neon.tech).
-- **Redis**: Use [Upstash Redis](https://upstash.com) for a managed, serverless Redis instance.
-- **VITE_API_URL**: Update your environment variables in your hosting provider to point to your live URL (e.g., `https://api.vivamobile.ng`).
+## 1. Cloud Infrastructure (Render Deployment)
+- **Render Blueprint Setup**: Push code to GitHub and create a new **Blueprint** service on [Render](https://render.com). Select `render.yaml` from the repository root.
+- **Database**: Render automatically provisions a managed PostgreSQL instance (`viva-db`) and binds `DATABASE_URL` directly to your web service.
+- **Redis (Optional)**: Use [Upstash Redis](https://upstash.com) or Render Redis instance for queuing and real-time socket scaling, setting `REDIS_URL`.
+- **Environment Variables**: Configure the following in the Render Dashboard:
+  - `GEMINI_API_KEY`: Your Google Gemini key for AI insights.
+  - `PAYSTACK_SECRET_KEY`: Your live/test Paystack secret key.
+  - `FIREBASE_SERVICE_ACCOUNT`: Single-line JSON string for Firebase Admin credential.
+  - `VITE_API_URL`: Set to your live Render Web Service URL (e.g., `https://viva-banking.onrender.com`).
 
 ## 2. Firebase Production Setup
 - Create a new project in the [Firebase Console](https://console.firebase.google.com) for production.

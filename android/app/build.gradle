@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.idemuosa.reallapp_1"
+    namespace = "com.vivamobile.banking"
     compileSdk = rootProject.ext.compileSdkVersion
 
     signingConfigs {
@@ -16,7 +16,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.idemuosa.reallapp_1"
+        applicationId "com.vivamobile.banking"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    cleartext: true // Allow local API testing, set to false for strict production
+    cleartext: false
   },
   plugins: {
     Keyboard: {

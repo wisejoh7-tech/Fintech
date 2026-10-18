@@ -4,9 +4,10 @@ This document summarizes every step needed to build, deploy, and secure your ban
 
 ---
 
-## 1. ☁️ Cloud Deployment (Render + PostgreSQL)
-**Goal:** Host your "Bank Server" and PostgreSQL Database securely on Render.
+## 1. ☁️ Cloud Deployment (Render & Railway)
+**Goal:** Host your "Bank Server" and PostgreSQL Database securely on Render and/or Railway.
 
+### Option A: Render Deployment
 1.  **Render Setup:**
     *   Push your code to GitHub.
     *   Go to [Render Dashboard](https://dashboard.render.com) > **Blueprints** > **New Blueprint Instance**.
@@ -19,6 +20,22 @@ This document summarizes every step needed to build, deploy, and secure your ban
     *   `NODE_ENV`: `production`
 3.  **Database Auto-Push:**
     *   On start, `start.sh` executes `npx prisma db push` automatically to sync the PostgreSQL database schema.
+
+### Option B: Railway Deployment
+1.  **Railway Setup:**
+    *   Push your code to GitHub.
+    *   Go to [Railway Dashboard](https://railway.app) > **New Project** > **Deploy from GitHub repo**.
+    *   Add a **PostgreSQL** database service to your project.
+    *   Connect your project repository. Railway will detect `railway.json` and `Procfile`.
+2.  **Environment Variables:** Set up required environment variables in Railway service settings:
+    *   `DATABASE_URL`: Set to `${{Postgres.DATABASE_URL}}` (or your PostgreSQL connection string).
+    *   `GEMINI_API_KEY`: Your AI insights API key.
+    *   `PAYSTACK_SECRET_KEY`: Your live Paystack key.
+    *   `FIREBASE_SERVICE_ACCOUNT`: Firebase admin private key JSON string.
+    *   `ENCRYPTION_KEY`: Auto-generated secret key.
+    *   `NODE_ENV`: `production`
+3.  **Database Auto-Push:**
+    *   Railway uses `railway.json` and `./start.sh` to run `npx prisma db push` and launch the application server.
 
 ---
 

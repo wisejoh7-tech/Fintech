@@ -2,7 +2,10 @@
 
 This guide outlines the steps required to transition from local development to a live production mobile app.
 
-## 1. Cloud Infrastructure (Render Deployment)
+## 1. Cloud Infrastructure (Render & Railway Deployment)
+This application supports deployment on both **Render** and **Railway**.
+
+### A. Render Setup
 - **Render Blueprint Setup**: Push code to GitHub and create a new **Blueprint** service on [Render](https://render.com). Select `render.yaml` from the repository root.
 - **Database**: Render automatically provisions a managed PostgreSQL instance (`viva-db`) and binds `DATABASE_URL` directly to your web service.
 - **Redis (Optional)**: Use [Upstash Redis](https://upstash.com) or Render Redis instance for queuing and real-time socket scaling, setting `REDIS_URL`.
@@ -11,6 +14,12 @@ This guide outlines the steps required to transition from local development to a
   - `PAYSTACK_SECRET_KEY`: Your live/test Paystack secret key.
   - `FIREBASE_SERVICE_ACCOUNT`: Single-line JSON string for Firebase Admin credential.
   - `VITE_API_URL`: Set to your live Render Web Service URL (e.g., `https://viva-banking.onrender.com`).
+
+### B. Railway Setup
+- **Railway Deployment**: Connect your repository to [Railway](https://railway.app). Railway automatically utilizes `railway.json` and `Procfile`.
+- **Database**: Add a PostgreSQL plugin service in Railway and reference `${{Postgres.DATABASE_URL}}` as `DATABASE_URL`.
+- **Environment Variables**: Set `GEMINI_API_KEY`, `PAYSTACK_SECRET_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `ENCRYPTION_KEY`, and `NODE_ENV=production` in the Railway environment settings.
+- **Startup Script**: Railway uses `./start.sh` to handle database schema pushes (`npx prisma db push`) and starts the server seamlessly.
 
 ## 2. Firebase Production Setup
 - Create a new project in the [Firebase Console](https://console.firebase.google.com) for production.

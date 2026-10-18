@@ -18,3 +18,16 @@ View your app in AI Studio: https://ai.studio/apps/b55e514e-8c61-4011-b458-119c8
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Deployment (Render & Railway)
+
+This project is configured to deploy to both **Render** and **Railway**.
+
+### Render Deployment
+- Uses `render.yaml` (Render Blueprint).
+- Connect repository in Render, select Blueprint, and configure environment variables (`GEMINI_API_KEY`, `PAYSTACK_SECRET_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `ENCRYPTION_KEY`).
+
+### Railway Deployment
+- Uses `railway.json` and `Procfile`.
+- Connect repository in Railway, add a PostgreSQL plugin service, set `DATABASE_URL` to `${{Postgres.DATABASE_URL}}`, and configure environment variables.
+- Runs `./start.sh` automatically to sync Prisma schema (`npx prisma db push`) and launch the app.

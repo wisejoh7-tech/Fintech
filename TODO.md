@@ -18,4 +18,4 @@
 - [x] Register TypeScript diagnostics for the imported project.
 - [x] Install dependencies and resolve the incompatible Windows-only Rollup package so the Linux runtime can install the existing dependency graph.
 - [x] Start the existing development server on the managed runtime port and verify `/` and `/manus-routes.json` respond with HTTP 200.
-- [ ] Save the imported project as a managed checkpoint on `main`.
+- [x] Save the imported project as a managed checkpoint on `main`.

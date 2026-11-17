@@ -9,7 +9,7 @@
 
 - [x] Preserve the React/Vite/TypeScript frontend implementation, including the existing authentication gate, dashboard, routed pages, modals, UI components, and user-facing behavior.
 - [x] Preserve the Express server and its existing `/api` behavior, Socket.IO setup, middleware, workers, services, and monitoring hooks.
-- [x] Preserve the existing Prisma schema and database-related configuration.
+- [x] Preserve the existing Prisma models and database-related configuration, adapting the provider from PostgreSQL to the managed MySQL-compatible runtime.
 - [x] Preserve the existing Firebase integration and environment-based setup.
 
 ## Initialize and verify the managed project
@@ -19,3 +19,12 @@
 - [x] Install dependencies and resolve the incompatible Windows-only Rollup package so the Linux runtime can install the existing dependency graph.
 - [x] Start the existing development server on the managed runtime port and verify `/` and `/manus-routes.json` respond with HTTP 200.
 - [x] Save the imported project as a managed checkpoint on `main`.
+
+## Complete environment setup
+
+- [x] Confirm the managed `DATABASE_URL` is available and uses the MySQL-compatible connection expected by this project.
+- [x] Align `prisma/schema.prisma` and `.env.example` with the managed MySQL-compatible database.
+- [x] Configure `GEMINI_API_KEY`, `PAYSTACK_SECRET_KEY`, and `ENCRYPTION_KEY` in protected project secrets.
+- [x] Remove the server-only Gemini key injection from the Vite browser bundle.
+- [x] Verify Prisma validation, TypeScript checks, production build, server response, and browser-bundle secret scan.
+- [ ] Replace the currently configured `FIREBASE_SERVICE_ACCOUNT` value with valid Firebase Admin service-account JSON; the submitted value was not valid JSON and its replacement card was cancelled.

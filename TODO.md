@@ -27,4 +27,6 @@
 - [x] Configure `GEMINI_API_KEY`, `PAYSTACK_SECRET_KEY`, and `ENCRYPTION_KEY` in protected project secrets.
 - [x] Remove the server-only Gemini key injection from the Vite browser bundle.
 - [x] Verify Prisma validation, TypeScript checks, production build, server response, and browser-bundle secret scan.
+- [x] Add strict TLS normalization for the managed TiDB/MySQL connection in Prisma runtime and production startup.
+- [x] Initialize the Prisma schema in the managed database and verify a read-only database query succeeds.
 - [ ] Replace the currently configured `FIREBASE_SERVICE_ACCOUNT` value with the complete Firebase Admin service-account JSON object; the current value contains only a PEM private-key string, so the server cannot initialize Firebase Admin. The secure replacement card was completed with that incomplete value and must be explicitly reopened for correction.

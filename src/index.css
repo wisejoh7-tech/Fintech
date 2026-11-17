@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+    --color-nysc-blue: #0284c7;
+    --color-nysc-gold: #FFCC00;
+    --color-nysc-khaki: #C3B091;
+}
+
+:root {
+    --background: #ffffff;
+    --viva-gradient: #ffffff;
+    --foreground: #2d1b4e; /* Deep Purple for main text */
+    --card: #ffffff;
+    --card-foreground: #2d1b4e;
+    --popover: #ffffff;
+    --popover-foreground: #2d1b4e;
+    --primary: #0ea5e9; /* Light Blue */
+    --primary-foreground: #ffffff;
+    --secondary: #7c3aed; /* Vibrant Purple */
+    --secondary-foreground: #ffffff;
+    --muted: #f3f4f6;
+    --muted-foreground: #6b7280;
+    --accent: #7c3aed;
+    --accent-foreground: #ffffff;
+    --destructive: #ef4444;
+    --border: #e0f2fe; /* Light Blue Border */
+    --input: #e0f2fe;
+    --ring: #7c3aed;
+    --chart-1: #0ea5e9;
+    --chart-2: #7c3aed;
+    --chart-3: #8b5cf6;
+    --chart-4: #38bdf8;
+    --chart-5: #6366f1;
+    --radius: 0.25rem; /* Reduced Roundness */
+    --sidebar: #ffffff;
+    --sidebar-foreground: #2d1b4e;
+    --sidebar-primary: #7c3aed;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f3f4f6;
+    --sidebar-accent-foreground: #7c3aed;
+    --sidebar-border: #e0f2fe;
+    --sidebar-ring: #7c3aed;
+}
+
+.dark {
+    --background: #f0f9ff; /* Light Blue Background */
+    --viva-gradient: #f0f9ff;
+    --foreground: #2d1b4e;
+    --card: #ffffff;
+    --card-foreground: #2d1b4e;
+    --popover: #ffffff;
+    --popover-foreground: #2d1b4e;
+    --primary: #0ea5e9;
+    --primary-foreground: #ffffff;
+    --secondary: #7c3aed;
+    --secondary-foreground: #ffffff;
+    --muted: #f0f9ff;
+    --muted-foreground: #6b7280;
+    --accent: #7c3aed;
+    --accent-foreground: #ffffff;
+    --destructive: #ef4444;
+    --border: #e0f2fe;
+    --input: #e0f2fe;
+    --ring: #7c3aed;
+    --chart-1: #0ea5e9;
+    --chart-2: #7c3aed;
+    --chart-3: #8b5cf6;
+    --chart-4: #38bdf8;
+    --chart-5: #6366f1;
+    --sidebar: #f0f9ff;
+    --sidebar-foreground: #2d1b4e;
+    --sidebar-primary: #7c3aed;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f0f9ff;
+    --sidebar-accent-foreground: #7c3aed;
+    --sidebar-border: #e0f2fe;
+    --sidebar-ring: #7c3aed;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    background: var(--background);
+    @apply text-foreground antialiased transition-colors duration-300;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+    min-height: 100vh;
+    font-size: 14px;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    overscroll-behavior-y: none;
+    }
+  html {
+    @apply font-sans scroll-smooth;
+    font-size: 14px;
+    }
+  h1 { @apply text-xl font-bold; }
+  h2 { @apply text-lg font-bold; }
+  h3 { @apply text-base font-bold; }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/20 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/40;
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

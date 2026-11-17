@@ -1,0 +1,13 @@
+{
+  "routes": [
+    { "path": "/", "title": "Dashboard" },
+    { "path": "/history", "title": "Transaction History" },
+    { "path": "/profile", "title": "Profile" },
+    { "path": "/settings", "title": "Account Settings" },
+    { "path": "/cards", "title": "Cards" },
+    { "path": "/admin", "title": "Admin" },
+    { "path": "/kyc", "title": "KYC" },
+    { "path": "/rewards", "title": "Rewards" },
+    { "path": "/privacy", "title": "Privacy Policy" }
+  ]
+}

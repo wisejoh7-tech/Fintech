@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the document belongs to the authenticated user
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow get: if isAuthenticated(); // Allow finding users by account number (for transfers)
+      allow list: if isAuthenticated() && request.query.limit <= 20;
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && isOwner(userId) &&
+                    // Protect critical fields from direct client updates
+                    !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'riskLevel', 'accountNumber']);
+    }
+
+    // Transactions - Strict rules to prevent fraud
+    match /users/{userId}/transactions/{txId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) &&
+                    request.resource.data.amount > 0 &&
+                    request.resource.data.status == 'success'; // Or 'pending' if using gateways
+    }
+
+    // Ledger - Read only for audit, NO client writes
+    match /ledger/{entryId} {
+      allow read: if false; // Only admin or backend should touch this
+      allow write: if false;
+    }
+
+    // Idempotency Keys - Prevent duplicate transactions
+    match /idempotency_keys/{key} {
+      allow get: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+
+    // KYC Data, Cards, Escrow etc.
+    match /users/{userId}/{collection}/{docId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+    }
+
+    // Admin override (for later use)
+    match /admins/{adminId} {
+      allow read: if isAuthenticated() && request.auth.token.admin == true;
+    }
+  }
+}

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: viva-banking
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install --force && npm run build
+    startCommand: ./start.sh
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: viva-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: REDIS_URL
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+
+databases:
+  - name: viva-db
+    databaseName: vivadb
+    user: vivauser
+    region: oregon
+    plan: free

@@ -1,0 +1,97 @@
+{
+  "project_info": {
+    "project_number": "761954432577",
+    "project_id": "vivabanking",
+    "storage_bucket": "vivabanking.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761954432577:android:0c7bcff1c998b18e44b8c0",
+        "android_client_info": {
+          "package_name": "bank.co"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "761954432577-rcmdjm4iss71avdf9p2lv98he7puh0nn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMnhWQI9-TWRugxKeBr42ESwEVl3LZUDg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "761954432577-rcmdjm4iss71avdf9p2lv98he7puh0nn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761954432577:android:930eb3ab2813723a44b8c0",
+        "android_client_info": {
+          "package_name": "com.vivamobile.banking"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "761954432577-rcmdjm4iss71avdf9p2lv98he7puh0nn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMnhWQI9-TWRugxKeBr42ESwEVl3LZUDg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "761954432577-rcmdjm4iss71avdf9p2lv98he7puh0nn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761954432577:android:b58fbe092b7eaf6944b8c0",
+        "android_client_info": {
+          "package_name": "viva.combanking"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "761954432577-rcmdjm4iss71avdf9p2lv98he7puh0nn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMnhWQI9-TWRugxKeBr42ESwEVl3LZUDg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "761954432577-rcmdjm4iss71avdf9p2lv98he7puh0nn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

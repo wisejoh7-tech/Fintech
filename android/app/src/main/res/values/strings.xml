@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Reallapp</string>
+    <string name="title_activity_main">Reallapp</string>
+    <string name="package_name">com.idemuosa.reallapp</string>
+    <string name="custom_url_scheme">com.idemuosa.reallapp</string>
+</resources>

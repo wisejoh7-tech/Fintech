@@ -4,25 +4,37 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/vivadb
-      - REDIS_URL=redis://redis:6379
-      - NODE_ENV=production
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY}
+      DATABASE_URL: mysql://viva:password@db:3306/vivadb
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      PORT: 3000
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   db:
-    image: postgres:15-alpine
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
     ports:
-      - "5432:5432"
+      - "3306:3306"
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=vivadb
+      MYSQL_USER: viva
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: root-password
+      MYSQL_DATABASE: vivadb
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot-password"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
 
   redis:
     image: redis:7-alpine
@@ -42,5 +54,5 @@ services:
       - app
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:

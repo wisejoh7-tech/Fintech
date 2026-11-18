@@ -1,0 +1,46 @@
+{
+  "family": "reallapp",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/reallappTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "reallapp",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/reallapp:IMAGE_TAG",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 3000, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "3000" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:reallapp/DATABASE_URL" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:reallapp/REDIS_URL" },
+        { "name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:reallapp/GEMINI_API_KEY" },
+        { "name": "PAYSTACK_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:reallapp/PAYSTACK_SECRET_KEY" },
+        { "name": "ENCRYPTION_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:reallapp/ENCRYPTION_KEY" },
+        { "name": "FIREBASE_SERVICE_ACCOUNT", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:reallapp/FIREBASE_SERVICE_ACCOUNT" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/reallapp",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

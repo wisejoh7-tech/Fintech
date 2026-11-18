@@ -30,3 +30,10 @@
 - [x] Add strict TLS normalization for the managed TiDB/MySQL connection in Prisma runtime and production startup.
 - [x] Initialize the Prisma schema in the managed database and verify a read-only database query succeeds.
 - [ ] Replace the currently configured `FIREBASE_SERVICE_ACCOUNT` value with the complete Firebase Admin service-account JSON object; the current value contains only a PEM private-key string, so the server cannot initialize Firebase Admin. The secure replacement card was completed with that incomplete value and must be explicitly reopened for correction.
+
+## Deployment configurations
+
+- [x] Add an AWS ECS/Fargate deployment guide and task-definition template using the existing Dockerfile, RDS MySQL, ElastiCache Redis, ALB health checks, and Secrets Manager.
+- [x] Correct the Render Blueprint to use an external MySQL-compatible `DATABASE_URL`, `npm ci`, and `/api/health` instead of provisioning incompatible PostgreSQL.
+- [x] Add a Vercel static Vite frontend configuration with SPA fallback and `VITE_API_URL` documentation for an AWS or Render backend.
+- [x] Align local Docker Compose and deployment documentation with the MySQL-compatible Prisma schema.
